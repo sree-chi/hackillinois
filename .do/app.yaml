@@ -42,7 +42,7 @@ static_sites:
   envs:
   - key: VITE_API_BASE
     scope: RUN_AND_BUILD_TIME
-    value: ${api.APP_URL}/server
+    value: /server
 
 databases:
 - engine: PG

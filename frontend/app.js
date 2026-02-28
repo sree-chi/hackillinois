@@ -1,6 +1,6 @@
 import * as solanaWeb3 from '@solana/web3.js';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const API_BASE = resolveApiBase();
 const AUTH_HEADER = 'Bearer hackillinois_2026_super_secret';
 const btnExpensiveApi = document.getElementById('btn-expensive-api');
 const NGROK_URL = 'https://nonobservant-patrick-catchingly.ngrok-free.dev/';
@@ -12,6 +12,28 @@ const btnCreate = document.getElementById('btn-create-policy');
 const btnSafe = document.getElementById('btn-safe-action');
 const btnHighRisk = document.getElementById('btn-high-risk');
 const btnUnlock = document.getElementById('btn-unlock');
+
+function resolveApiBase() {
+    const configuredBase = import.meta.env.VITE_API_BASE?.trim();
+    if (configuredBase) {
+        return configuredBase.replace(/\/$/, '');
+    }
+
+    const { origin, hostname } = window.location;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    return isLocalhost ? 'http://localhost:8000' : `${origin}/server`;
+}
+
+async function readApiResponse(res) {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        return await res.json();
+    }
+
+    const text = await res.text();
+    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 120) || '<empty response>';
+    throw new Error(`Expected JSON but received ${contentType || 'unknown content type'} (status ${res.status}): ${snippet}`);
+}
 
 function log(msg, type = 'info') {
     const time = new Date().toLocaleTimeString();
@@ -47,7 +69,7 @@ btnCreate.addEventListener('click', async () => {
             })
         });
 
-        const data = await res.json();
+        const data = await readApiResponse(res);
         if (res.ok) {
             currentPolicyId = data.id;
             log(`Success! Created Policy ID: <strong>${currentPolicyId}</strong>`, 'success');
@@ -90,7 +112,7 @@ btnSafe.addEventListener('click', async () => {
             })
         });
 
-        const data = await res.json();
+        const data = await readApiResponse(res);
         if (res.ok) {
             log(`Action Approved! Receipt: ${data.receipt_signature}`, 'success');
         } else {
@@ -136,7 +158,7 @@ btnHighRisk.addEventListener('click', async () => {
             btnUnlock.disabled = false;
             btnHighRisk.disabled = true;
         } else {
-            const data = await res.json();
+            const data = await readApiResponse(res);
             log(`Result: ${JSON.stringify(data)}`, 'info');
         }
     } catch (e) {
@@ -208,7 +230,7 @@ btnUnlock.addEventListener('click', async () => {
             body: JSON.stringify(requestBody)
         });
 
-        const data = await res.json();
+        const data = await readApiResponse(res);
         if (res.ok) {
             log(`x402 Payment Verified by API! Action Unlocked.`, 'success');
             log(`Immutable Audit Anchor: <a href="https://explorer.solana.com/tx/${data.receipt_signature}?cluster=devnet" target="_blank" style="color:var(--solana-green)">${data.receipt_signature.substring(0, 25)}...</a>`, 'solana');
@@ -254,7 +276,7 @@ btnExpensiveApi.addEventListener('click', async () => {
 
         // STEP 2: Evaluate Sentinel's Decision
         if (sentinelRes.status === 403) {
-            const data = await sentinelRes.json();
+            const data = await readApiResponse(sentinelRes);
             log(`🚨 FLAG TRIPPED: Sentinel-Auth blocked the request!`, 'error');
             log(`Reason: ${data.detail.error.message}`, 'error');
             log(`The expensive ngrok API was NOT called.`, 'success');
@@ -262,7 +284,7 @@ btnExpensiveApi.addEventListener('click', async () => {
             log(`🚨 FLAG TRIPPED: 402 Payment Required!`, 'error');
             log(`Action exceeds risk threshold. Solana x402 verification required before calling ngrok.`, 'info');
         } else if (sentinelRes.ok) {
-            const data = await sentinelRes.json();
+            const data = await readApiResponse(sentinelRes);
             log(`Sentinel Approved. Receipt: ${data.receipt_signature}`, 'success');
 
             // STEP 3: Actually execute the expensive API call since it was approved
