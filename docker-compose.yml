@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: sentinel
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/sentinel
+      - API_KEY=default-dev-key
+      - SOLANA_RECEIPT_MODE=mock
+      # Add valid Solana RPC URL and Private Key below when ready
+      # - SOLANA_RPC_URL=https://api.devnet.solana.com
+      # - SOLANA_PRIVATE_KEY=[1,2,3...255]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
