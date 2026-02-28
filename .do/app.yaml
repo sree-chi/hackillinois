@@ -1,0 +1,48 @@
+name: hackillinois-sentinel
+region: nyc
+services:
+- name: api
+  github:
+    repo: YOUR_GITHUB_USERNAME/YOUR_REPO_NAME
+    branch: main
+  dockerfile_path: Dockerfile
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_AND_BUILD_TIME
+    value: ${db.DATABASE_URL}
+  - key: CORS_ALLOW_ORIGINS
+    scope: RUN_TIME
+    value: ${frontend.APP_URL}
+  - key: API_KEY
+    scope: RUN_TIME
+    value: hackillinois_2026_super_secret
+  - key: SOLANA_RECEIPT_MODE
+    scope: RUN_TIME
+    value: live
+  - key: SOLANA_RPC_URL
+    scope: RUN_TIME
+    value: https://api.devnet.solana.com
+  - key: SOLANA_PRIVATE_KEY
+    scope: RUN_TIME
+    value: "[231,178,129,90,93,203,217,120,116,162,83,6,33,255,65,211,205,139,193,95,222,25,155,215,196,100,147,54,122,246,27,120,62,48,27,23,39,184,197,252,62,168,163,206,46,13,159,135,84,7,207,172,249,106,60,189,204,37,131,67,80,54,93,75]"
+  http_port: 8000
+
+static_sites:
+- name: frontend
+  github:
+    repo: YOUR_GITHUB_USERNAME/YOUR_REPO_NAME
+    branch: main
+  source_dir: frontend
+  build_command: npm run build
+  output_dir: dist
+  envs:
+  - key: VITE_API_BASE
+    scope: RUN_AND_BUILD_TIME
+    value: ${api.APP_URL}
+
+databases:
+- engine: PG
+  name: db
+  num_nodes: 1
+  size: db-s-dev-database
+  version: "15"
