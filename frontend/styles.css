@@ -310,6 +310,11 @@ textarea {
     margin-top: 18px;
 }
 
+.dashboard-list {
+    display: grid;
+    gap: 14px;
+}
+
 .alert-card {
     border-radius: 18px;
     padding: 16px 18px;

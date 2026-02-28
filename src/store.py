@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Literal
 
-from sqlakchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from src.db_models import (
+    AccountApiClientModel,
+    AccountModel,
+    AccountSessionModel,
     ApiClientModel,
     AuditRecordModel,
     AuditStatusEnum,
@@ -15,51 +16,79 @@ from src.db_models import (
     ReceiptStatusEnum,
 )
 from src.models import (
+    AccountApiKeySummary,
+    AccountRecord,
+    AccountSessionRecord,
     ApiClientRecord,
     AuditRecord,
     AuthorizationProof,
     CreatePolicyRequest,
     IssueApiKeyRequest,
     Policy,
-    PolicyVersionSummary,
-    UpdatePolicyRequest,
     canonical_hash,
     new_id,
 )
-
-def _policy_from_row(row: PolicyModel) -> Policy: 
-    return Policy.model_validate({
-        "id": row.id,
-        "name": row.name,
-        "description": row.description,
-        "policy_hash": row.policy_hash,
-        "rules": row.rules,
-        "version": row.version,
-        "root_policy_id": row.root_policy_id,
-        "superseded_by": row.superseded_by,
-        "created_at": row.created_at,
-    })
 
 
 class DatabaseStore:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def create_account(self, email: str, password_hash: str, full_name: str | None) -> AccountRecord:
+        account = AccountRecord(email=email, full_name=full_name)
+        row = AccountModel(
+            account_id=account.account_id,
+            email=account.email,
+            full_name=account.full_name,
+            password_hash=password_hash,
+            created_at=account.created_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return AccountRecord.model_validate(row)
+
+    def get_account_by_email(self, email: str) -> AccountModel | None:
+        return self.db.query(AccountModel).filter(AccountModel.email == email).first()
+
+    def get_account_by_id(self, account_id: str) -> AccountRecord | None:
+        row = self.db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
+        return AccountRecord.model_validate(row) if row else None
+
+    def create_account_session(self, account_id: str, token_hash: str, expires_at: datetime) -> AccountSessionRecord:
+        session = AccountSessionRecord(account_id=account_id, expires_at=expires_at)
+        row = AccountSessionModel(
+            session_id=session.session_id,
+            account_id=session.account_id,
+            token_hash=token_hash,
+            created_at=session.created_at,
+            expires_at=session.expires_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return AccountSessionRecord.model_validate(row)
+
+    def get_account_session_by_hash(self, token_hash: str) -> AccountSessionModel | None:
+        return self.db.query(AccountSessionModel).filter(AccountSessionModel.token_hash == token_hash).first()
+
     def create_api_client(
         self,
         payload: IssueApiKeyRequest,
         api_key_hash: str,
         api_key_prefix: str,
+        account_id: str | None = None,
+        owner_email: str | None = None,
     ) -> ApiClientRecord:
         client = ApiClientRecord(
             app_name=payload.app_name,
             owner_name=payload.owner_name,
-            owner_email=payload.owner_email,
+            owner_email=owner_email or "",
             use_case=payload.use_case,
             api_key_prefix=api_key_prefix,
         )
 
-        db_client = ApiClientModel(
+        row = ApiClientModel(
             client_id=client.client_id,
             app_name=client.app_name,
             owner_name=client.owner_name,
@@ -69,217 +98,99 @@ class DatabaseStore:
             api_key_prefix=client.api_key_prefix,
             created_at=client.created_at,
         )
-        self.db.add(db_client)
+        self.db.add(row)
+
+        if account_id:
+            link = AccountApiClientModel(
+                id=new_id("acl"),
+                account_id=account_id,
+                client_id=client.client_id,
+                created_at=client.created_at,
+            )
+            self.db.add(link)
+
         self.db.commit()
-        self.db.refresh(db_client)
-        return client
+        self.db.refresh(row)
+        return ApiClientRecord.model_validate(row)
+
+    def list_api_clients_for_account(self, account_id: str) -> list[AccountApiKeySummary]:
+        rows = (
+            self.db.query(ApiClientModel)
+            .join(AccountApiClientModel, AccountApiClientModel.client_id == ApiClientModel.client_id)
+            .filter(AccountApiClientModel.account_id == account_id)
+            .order_by(ApiClientModel.created_at.desc())
+            .all()
+        )
+        return [
+            AccountApiKeySummary(
+                client_id=row.client_id,
+                app_name=row.app_name,
+                owner_email=row.owner_email,
+                api_key_prefix=row.api_key_prefix,
+                created_at=row.created_at,
+                last_used_at=row.last_used_at,
+                revoked_at=row.revoked_at,
+            )
+            for row in rows
+        ]
 
     def get_api_client_by_hash(self, api_key_hash: str) -> ApiClientRecord | None:
-        row = (
-            self.db.query(ApiClientModel)
-            .filter(ApiClientModel.api_key_hash == api_key_hash)
-            .first()
-        )
-        return ApiClientRecord.model_validate(row) if row else None
-    
-    def get_api_client_by_id(self, client_id: str) -> ApiClientRecord | None:
-        row = (
-            self.db.query(ApiClientModel)
-            .filter(ApiClientModel.client_id == client_id)
-            .first()
-        )
+        row = self.db.query(ApiClientModel).filter(ApiClientModel.api_key_hash == api_key_hash).first()
         return ApiClientRecord.model_validate(row) if row else None
 
     def mark_api_client_used(self, client_id: str) -> None:
-        row = (
-            self.db.query(ApiClientModel)
-            .filter(ApiClientModel.client_id == client_id)
-            .first()
-        )
-        if row:
-            row.last_used_at = datetime.now(timezone.utc)
-            self.db.commit()
-
-    def rotate_api_client_key(self, 
-                              client_id: str, 
-                              new_api_key_hash: str,
-                              new_api_key_prefix: str) -> ApiClientRecord | None:
-        row = (
-            self.db.query(ApiClientModel)
-            .filter(ApiClientModel.client_id == client_id)
-            .first()
-        )
-
-        if not row or row.revoked_at is not None:
-            return None
-        row.api_key_hash = new_api_key_hash
-        row.api_key_prefix = new_api_key_prefix
-        row.last_used_at = None
-        self.db.commit()
-        self.db.refresh(row)
-        return ApiClientRecord.model_validate(row)
-    
-    def revoke_api_client(self, client_id: str) -> ApiClientRecord | None:
-        row = (
-            self.db.query(ApiClientModel)
-            .filter(ApiClientModel.client_id == client_id)
-            .first()
-
-        )
+        row = self.db.query(ApiClientModel).filter(ApiClientModel.client_id == client_id).first()
         if not row:
-            return None
-        row.revoked_at = datetime.now(timezone.utc)
+            return
+        row.last_used_at = datetime.now(timezone.utc)
         self.db.commit()
-        self.db.refresh(row)
-        return ApiClientRecord.model_validate(row)
-
 
     def create_policy(self, payload: CreatePolicyRequest, idempotency_key: str | None) -> Policy:
         if idempotency_key:
-            existing = (
-                self.db.query(PolicyModel)
-                .filter(PolicyModel.idempotency_key == idempotency_key)
-                .first()
-            )
+            existing = self.db.query(PolicyModel).filter(PolicyModel.idempotency_key == idempotency_key).first()
             if existing:
-                return _policy_from_row(existing)
+                return Policy.model_validate({
+                    "id": existing.id,
+                    "name": existing.name,
+                    "description": existing.description,
+                    "policy_hash": existing.policy_hash,
+                    "rules": existing.rules,
+                    "created_at": existing.created_at,
+                })
 
         payload_data = payload.model_dump()
         policy_hash = canonical_hash(payload_data)
-        policy_id = new_id("pol")
-        policy = Policy(
-            id=policy_id,
-            **payload_data,
-            policy_hash=policy_hash,
-            version=1,
-            root_policy_id=policy_id,   # first version: root == self
-        )
-        db_policy = PolicyModel(
+        policy = Policy(**payload_data, policy_hash=policy_hash)
+
+        row = PolicyModel(
             id=policy.id,
             name=policy.name,
             description=policy.description,
             policy_hash=policy.policy_hash,
             rules=policy.rules.model_dump(),
-            version=policy.version,
-            root_policy_id=policy.root_policy_id,
-            superseded_by=None,
             created_at=policy.created_at,
             idempotency_key=idempotency_key,
         )
-        self.db.add(db_policy)
+        self.db.add(row)
         self.db.commit()
-        self.db.refresh(db_policy)
+        self.db.refresh(row)
         return policy
-    
 
-    def update_policy(self, policy_id: str, payload: UpdatePolicyRequest) -> Policy | None:
-        
-        old_row = (
-            self.db.query(PolicyModel)
-            .filter(PolicyModel.id == policy_id)
-            .first()
-        )
-        if not old_row or old_row.superseded_by is not None:
-            return None
-
-        # Merge: use existing values for any field not supplied in the request
-        new_name = payload.name if payload.name is not None else old_row.name
-        new_description = payload.description if payload.description is not None else old_row.description
-        new_rules = payload.rules.model_dump() if payload.rules is not None else old_row.rules
-
-        new_version = old_row.version + 1
-        new_id_val = new_id("pol")
-        new_hash = canonical_hash({"name": new_name, "description": new_description, "rules": new_rules})
-
-        new_row = PolicyModel(
-            id=new_id_val,
-            name=new_name,
-            description=new_description,
-            policy_hash=new_hash,
-            rules=new_rules,
-            version=new_version,
-            root_policy_id=old_row.root_policy_id,
-            superseded_by=None,
-            idempotency_key=None,
-        )
-        self.db.add(new_row)
-
-        # Stamp the old version as superseded
-        old_row.superseded_by = new_id_val
-        self.db.commit()
-        self.db.refresh(new_row)
-        return _policy_from_row(new_row)
-    
     def get_policy(self, policy_id: str) -> Policy | None:
         row = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
-        return _policy_from_row(row) if row else None
-        '''
-        db_policy = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
-        if not db_policy:
+        if not row:
             return None
-
         return Policy.model_validate({
-            "id": db_policy.id,
-            "name": db_policy.name,
-            "description": db_policy.description,
-            "policy_hash": db_policy.policy_hash,
-            "rules": db_policy.rules,
-            "created_at": db_policy.created_at
+            "id": row.id,
+            "name": row.name,
+            "description": row.description,
+            "policy_hash": row.policy_hash,
+            "rules": row.rules,
+            "created_at": row.created_at,
         })
-        '''
-    
-    def get_latest_policy_version(self, root_policy_id: str) -> Policy | None:
-        row = (
-            self.db.query(PolicyModel)
-            .filter(
-                PolicyModel.root_policy_id == root_policy_id,
-                PolicyModel.superseded_by.is_(None),
-
-            )
-            .order_by(desc(PolicyModel.version))
-            .first()
-        )
-        return _policy_from_row(row) if row else None
-    
-    def list_policy_versions(self, root_policy_id: str) -> list[PolicyVersionSummary]:
-        rows = (
-            self.db.query(PolicyModel)
-            .filter(PolicyModel.root_policy_id == root_policy_id)
-            .order_by(asc(PolicyModel.version))
-            .all()
-        )
-
-        return [
-            PolicyVersionSummary(
-                id=r.id,
-                version=r.version,
-                policy_hash=r.policy_hash,
-                created_at=r.created_at,
-                superseded_by=r.superseded_by,
-            )
-            for r in rows
-        ]
-    
-    def list_policies(self, limit: int = 50, offset: int = 0) -> tuple[list[Policy], int]:
-        total = (
-            self.db.query(PolicyModel)
-            .filter(PolicyModel.superseded_by.is_(None))
-            .count()
-        )
-
-        rows = (
-            self.db.query(PolicyModel)
-            .filter(PolicyModel.superseded_by.is_(None))
-            .order_by(asc(PolicyModel.version))
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
-
-        return [_policy_from_row(r) for r in rows], total
 
     def append_audit(self, audit: AuditRecord) -> None:
-        db_audit = AuditRecordModel(
+        row = AuditRecordModel(
             id=audit.id,
             policy_id=audit.policy_id,
             request_id=audit.request_id,
@@ -298,15 +209,13 @@ class DatabaseStore:
             receipt_status=ReceiptStatusEnum(audit.receipt_status.value),
             receipt_signature=audit.receipt_signature,
             violation=audit.violation.model_dump() if audit.violation else None,
-            created_at=audit.created_at
+            created_at=audit.created_at,
         )
-        self.db.add(db_audit)
+        self.db.add(row)
         self.db.commit()
 
-    
-
     def create_proof(self, proof: AuthorizationProof) -> None:
-        db_proof = AuthorizationProofModel(
+        row = AuthorizationProofModel(
             proof_id=proof.proof_id,
             policy_id=proof.policy_id,
             policy_hash=proof.policy_hash,
@@ -322,29 +231,28 @@ class DatabaseStore:
             issued_at=proof.issued_at,
             expires_at=proof.expires_at,
         )
-        self.db.add(db_proof)
+        self.db.add(row)
         self.db.commit()
 
     def get_proof(self, proof_id: str) -> AuthorizationProof | None:
-        db_proof = self.db.query(AuthorizationProofModel).filter(AuthorizationProofModel.proof_id == proof_id).first()
-        if not db_proof:
+        row = self.db.query(AuthorizationProofModel).filter(AuthorizationProofModel.proof_id == proof_id).first()
+        if not row:
             return None
-
         return AuthorizationProof.model_validate({
-            "proof_id": db_proof.proof_id,
-            "policy_id": db_proof.policy_id,
-            "policy_hash": db_proof.policy_hash,
-            "action_hash": db_proof.action_hash,
-            "requester": db_proof.requester,
-            "agent_wallet": db_proof.agent_wallet,
-            "origin_service": db_proof.origin_service,
-            "target_service": db_proof.target_service,
-            "issuer": db_proof.issuer,
-            "receipt_signature": db_proof.receipt_signature,
-            "signature": db_proof.signature,
-            "schema_version": db_proof.schema_version,
-            "issued_at": db_proof.issued_at,
-            "expires_at": db_proof.expires_at,
+            "proof_id": row.proof_id,
+            "policy_id": row.policy_id,
+            "policy_hash": row.policy_hash,
+            "action_hash": row.action_hash,
+            "requester": row.requester,
+            "agent_wallet": row.agent_wallet,
+            "origin_service": row.origin_service,
+            "target_service": row.target_service,
+            "issuer": row.issuer,
+            "receipt_signature": row.receipt_signature,
+            "signature": row.signature,
+            "schema_version": row.schema_version,
+            "issued_at": row.issued_at,
+            "expires_at": row.expires_at,
         })
 
     def list_audits(
@@ -354,43 +262,40 @@ class DatabaseStore:
         created_after: datetime | None = None,
     ) -> list[AuditRecord]:
         query = self.db.query(AuditRecordModel).filter(AuditRecordModel.policy_id == policy_id)
-
         if status:
             query = query.filter(AuditRecordModel.status == AuditStatusEnum(status))
         if created_after:
             query = query.filter(AuditRecordModel.created_at >= created_after)
 
-        db_audits = query.all()
-
-        results = []
-        for db_audit in db_audits:
-            results.append(AuditRecord.model_validate({
-                "id": db_audit.id,
-                "policy_id": db_audit.policy_id,
-                "request_id": db_audit.request_id,
-                "status": db_audit.status.value,
-                "requester": db_audit.requester,
-                "origin_service": db_audit.origin_service,
-                "target_service": db_audit.target_service,
-                "agent_wallet": db_audit.agent_wallet,
-                "action_type": db_audit.action_type,
-                "http_method": db_audit.http_method,
-                "resource": db_audit.resource,
-                "amount_usd": db_audit.amount_usd,
-                "action_hash": db_audit.action_hash,
-                "policy_hash": db_audit.policy_hash,
-                "proof_id": db_audit.proof_id,
-                "receipt_status": db_audit.receipt_status.value,
-                "receipt_signature": db_audit.receipt_signature,
-                "violation": db_audit.violation,
-                "created_at": db_audit.created_at
-            }))
-
-        return results
+        rows = query.order_by(AuditRecordModel.created_at.desc()).all()
+        return [
+            AuditRecord.model_validate({
+                "id": row.id,
+                "policy_id": row.policy_id,
+                "request_id": row.request_id,
+                "status": row.status.value,
+                "requester": row.requester,
+                "origin_service": row.origin_service,
+                "target_service": row.target_service,
+                "agent_wallet": row.agent_wallet,
+                "action_type": row.action_type,
+                "http_method": row.http_method,
+                "resource": row.resource,
+                "amount_usd": row.amount_usd,
+                "action_hash": row.action_hash,
+                "policy_hash": row.policy_hash,
+                "proof_id": row.proof_id,
+                "receipt_status": row.receipt_status.value,
+                "receipt_signature": row.receipt_signature,
+                "violation": row.violation,
+                "created_at": row.created_at,
+            })
+            for row in rows
+        ]
 
     def get_requests_in_last_minute(self, policy_id: str) -> int:
-        one_min_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
+        one_minute_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
         return self.db.query(AuditRecordModel).filter(
             AuditRecordModel.policy_id == policy_id,
-            AuditRecordModel.created_at >= one_min_ago
+            AuditRecordModel.created_at >= one_minute_ago,
         ).count()

@@ -64,8 +64,18 @@ class UpdatePolicyRequest(BaseModel):
 class IssueApiKeyRequest(BaseModel):
     app_name: str = Field(min_length=1, max_length=100)
     owner_name: str | None = Field(default=None, max_length=100)
-    owner_email: str = Field(min_length=3, max_length=200)
     use_case: str | None = Field(default=None, max_length=500)
+
+
+class RegisterAccountRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+    full_name: str | None = Field(default=None, max_length=100)
+
+
+class LoginAccountRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
 
 
 class Policy(BaseModel):
@@ -225,3 +235,43 @@ class PublicApiOverview(BaseModel):
     key_endpoint: str
     quickstart: list[str]
     sample_policy_rules: dict[str, Any]
+
+
+class AccountRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    account_id: str = Field(default_factory=lambda: new_id("acct"))
+    email: str
+    full_name: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class AccountSessionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: str = Field(default_factory=lambda: new_id("sess"))
+    account_id: str
+    created_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime
+    revoked_at: datetime | None = None
+
+
+class AccountSessionResponse(BaseModel):
+    account: AccountRecord
+    session_token: str
+    expires_at: datetime
+
+
+class AccountApiKeySummary(BaseModel):
+    client_id: str
+    app_name: str
+    owner_email: str
+    api_key_prefix: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class AccountDashboardResponse(BaseModel):
+    account: AccountRecord
+    api_keys: list[AccountApiKeySummary]

@@ -9,26 +9,37 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-import google.generativeai as genai
-from dotenv import load_dotenv
 
-env_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), ".env.local")
-load_dotenv(env_path)
-
-from src.auth import api_key_prefix, generate_api_key, hash_api_key, verify_api_key
+from src.auth import (
+    api_key_prefix,
+    generate_api_key,
+    generate_session_token,
+    hash_api_key,
+    hash_password,
+    hash_session_token,
+    normalize_email,
+    verify_account_session,
+    verify_api_key,
+    verify_password,
+)
 from src.database import Base, engine, get_db
 from src.models import (
+    AccountDashboardResponse,
+    AccountSessionResponse,
     AgentIntentRequest,
     AuditRecord,
     AuditStatus,
+    AccountRecord,
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
+    LoginAccountRequest,
     PublicApiOverview,
     CreatePolicyRequest,
     ErrorEnvelope,
     IssueApiKeyRequest,
     IssueApiKeyResponse,
+    RegisterAccountRequest,
     ReceiptStatus,
     SafetyViolation,
     VerifyProofRequest,
@@ -80,6 +91,8 @@ app.add_middleware(
     expose_headers=["x-mock-payment-token"],
 )
 
+ACCOUNT_SESSION_TTL_SECONDS = int(os.getenv("ACCOUNT_SESSION_TTL_SECONDS", "86400"))
+
 
 @app.get("/")
 def read_root():
@@ -109,9 +122,10 @@ def public_overview(request: Request):
         name="Sentinel Auth API",
         status="online",
         docs_url=f"{base_url}/docs",
-        key_endpoint=f"{base_url}/v1/developer/keys",
+        key_endpoint=f"{base_url}/v1/accounts/register",
         quickstart=[
-            "Create a developer key from the public portal or POST /v1/developer/keys.",
+            "Create an account or sign in from the portal.",
+            "Generate an API key from your logged-in dashboard.",
             "Send the key as Authorization: Bearer <key> or X-API-Key.",
             "Create a policy, then route each agent action through /v1/authorize.",
         ],
@@ -123,17 +137,88 @@ def public_overview(request: Request):
     )
 
 
+def build_session_response(account: AccountRecord, request: Request, store: DatabaseStore) -> AccountSessionResponse:
+    session_token = generate_session_token()
+    session = store.create_account_session(
+        account_id=account.account_id,
+        token_hash=hash_session_token(session_token),
+        expires_at=expires_at(ACCOUNT_SESSION_TTL_SECONDS),
+    )
+    return AccountSessionResponse(
+        account=account,
+        session_token=session_token,
+        expires_at=session.expires_at,
+    )
+
+
+@app.post("/v1/accounts/register", response_model=AccountSessionResponse, status_code=status.HTTP_201_CREATED)
+def register_account(payload: RegisterAccountRequest, request: Request, db: Session = Depends(get_db)):
+    store = DatabaseStore(db)
+    email = normalize_email(payload.email)
+    if store.get_account_by_email(email):
+        raise error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="ACCOUNT_ALREADY_EXISTS",
+            message="An account with this email already exists.",
+        )
+    account = store.create_account(email=email, password_hash=hash_password(payload.password), full_name=payload.full_name)
+    return build_session_response(account, request, store)
+
+
+@app.post("/v1/accounts/login", response_model=AccountSessionResponse)
+def login_account(payload: LoginAccountRequest, request: Request, db: Session = Depends(get_db)):
+    store = DatabaseStore(db)
+    email = normalize_email(payload.email)
+    account_row = store.get_account_by_email(email)
+    if not account_row or not verify_password(payload.password, account_row.password_hash):
+        raise error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="INVALID_LOGIN",
+            message="Invalid email or password.",
+        )
+    account = AccountRecord.model_validate(account_row)
+    return build_session_response(account, request, store)
+
+
+@app.get("/v1/accounts/me", response_model=AccountRecord)
+def get_current_account(account: AccountRecord = Depends(verify_account_session)):
+    return account
+
+
+@app.get("/v1/accounts/me/dashboard", response_model=AccountDashboardResponse)
+def account_dashboard(
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return AccountDashboardResponse(
+        account=account,
+        api_keys=store.list_api_clients_for_account(account.account_id),
+    )
+
+
 @app.post("/v1/developer/keys", response_model=IssueApiKeyResponse, status_code=status.HTTP_201_CREATED)
-def issue_developer_key(payload: IssueApiKeyRequest, request: Request, db: Session = Depends(get_db)):
+def issue_developer_key(
+    payload: IssueApiKeyRequest,
+    request: Request,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
     key = generate_api_key()
     prefix = api_key_prefix(key)
     store = DatabaseStore(db)
-    client = store.create_api_client(payload, api_key_hash=hash_api_key(key), api_key_prefix=prefix)
+    client = store.create_api_client(
+        payload,
+        api_key_hash=hash_api_key(key),
+        api_key_prefix=prefix,
+        account_id=account.account_id,
+        owner_email=account.email,
+    )
     base_url = resolve_public_base_url(request)
     return IssueApiKeyResponse(
         client_id=client.client_id,
         app_name=client.app_name,
-        owner_email=client.owner_email,
+        owner_email=account.email,
         api_key=key,
         api_key_prefix=client.api_key_prefix,
         created_at=client.created_at,
@@ -425,7 +510,15 @@ def authorize(
 
 @app.post("/v1/agent/intent", dependencies=[Depends(verify_api_key)])
 def generate_agent_intent(payload: AgentIntentRequest):
-    from dotenv import dotenv_values
+    try:
+        import google.generativeai as genai
+        from dotenv import dotenv_values
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini dependencies are not installed on this server.",
+        ) from exc
+
     env_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), ".env.local")
     logger.info(f"Loading dot env from {env_path}")
     env = dotenv_values(env_path)

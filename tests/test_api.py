@@ -65,13 +65,27 @@ def create_default_policy() -> str:
     return response.json()["id"]
 
 
+def create_account_session() -> str:
+    response = client.post(
+        "/v1/accounts/register",
+        json={
+            "email": "owner@example.com",
+            "password": "strong-password-123",
+            "full_name": "Portal Owner",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["session_token"]
+
+
 def issue_public_key() -> str:
+    session_token = create_account_session()
     response = client.post(
         "/v1/developer/keys",
+        headers={"Authorization": f"Bearer {session_token}"},
         json={
             "app_name": "Portal Test App",
             "owner_name": "Portal Owner",
-            "owner_email": "owner@example.com",
             "use_case": "Testing public onboarding",
         },
     )
@@ -79,20 +93,43 @@ def issue_public_key() -> str:
     return response.json()["api_key"]
 
 
-def test_public_key_issuance_returns_live_key_material():
+def test_register_account_returns_session():
     response = client.post(
-        "/v1/developer/keys",
+        "/v1/accounts/register",
         json={
-            "app_name": "Public Portal App",
-            "owner_email": "founder@example.com",
+            "email": "founder@example.com",
+            "password": "strong-password-123",
+            "full_name": "Founder",
         },
     )
 
     assert response.status_code == 201
     body = response.json()
-    assert body["api_key"].startswith("ska_live_")
-    assert body["authorization_header"].startswith("Bearer ska_live_")
-    assert body["docs_url"].endswith("/docs")
+    assert body["session_token"].startswith("ssa_live_")
+    assert body["account"]["email"] == "founder@example.com"
+
+
+def test_account_dashboard_lists_issued_keys():
+    session_token = create_account_session()
+    issue = client.post(
+        "/v1/developer/keys",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "app_name": "Public Portal App",
+            "owner_name": "Portal Owner",
+        },
+    )
+    assert issue.status_code == 201
+
+    response = client.get(
+        "/v1/accounts/me/dashboard",
+        headers={"Authorization": f"Bearer {session_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["account"]["email"] == "owner@example.com"
+    assert body["api_keys"][0]["app_name"] == "Public Portal App"
 
 
 def test_issued_public_key_can_access_protected_endpoints():

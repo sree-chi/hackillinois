@@ -97,3 +97,33 @@ class ApiClientModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AccountModel(Base):
+    __tablename__ = "accounts"
+
+    account_id = Column(String, primary_key=True, index=True)
+    email = Column(String(200), nullable=False, unique=True, index=True)
+    full_name = Column(String(100), nullable=True)
+    password_hash = Column(String(200), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AccountSessionModel(Base):
+    __tablename__ = "account_sessions"
+
+    session_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AccountApiClientModel(Base):
+    __tablename__ = "account_api_clients"
+
+    id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    client_id = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
