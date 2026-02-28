@@ -17,13 +17,15 @@
             <h1>Sentinel-Auth <span>The Policy-Gated API Proxy</span></h1>
             <p>Agentic intent verification backed by Solana's lightning-fast Alpenglow finality.</p>
         </header>
-        <div class="panel premium-panel">
+        <div class="panel premium-panel" style="flex-direction: column; align-items: stretch; gap: 15px;">
             <div class="premium-content">
                 <h2>💎 Premium API Integration Demo</h2>
                 <p class="subtitle">Simulate an AI agent attempting to use a highly expensive third-party endpoint.</p>
             </div>
-            <div class="premium-action">
-                <button id="btn-expensive-api" class="btn warning" disabled>Call Expensive ngrok API ($5,000)</button>
+            <textarea id="gemini-task-input" class="action-input"
+                rows="3">I need you to run our deep-learning model on the new dataset using the ngrok compute cluster. The cluster costs $1,500 to spin up.</textarea>
+            <div class="premium-action" style="align-self: flex-start;">
+                <button id="btn-expensive-api" class="btn warning" disabled>Generate Agent Intent & Execute</button>
             </div>
         </div>
         <div class="dashboard">

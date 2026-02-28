@@ -271,6 +271,24 @@ header p {
     margin-bottom: 0;
 }
 
+.action-input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.action-input:focus {
+    border-color: var(--accent-blue);
+}
+
 .premium-action .btn {
     min-width: 260px;
     padding: 1rem 1.5rem;

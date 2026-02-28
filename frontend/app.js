@@ -1,5 +1,5 @@
-const API_BASE = 'http://localhost:8000';
-const AUTH_HEADER = 'Bearer hackillinois_2026_super_secret';
+const API_BASE = 'http://127.0.0.1:8000';
+const AUTH_HEADER = 'Bearer default-dev-key';
 const btnExpensiveApi = document.getElementById('btn-expensive-api');
 const NGROK_URL = 'https://nonobservant-patrick-catchingly.ngrok-free.dev/';
 const HIGH_RISK_THRESHOLD = 1000;
@@ -53,10 +53,10 @@ btnCreate.addEventListener('click', async () => {
             log(`Success! Created Policy ID: <strong>${currentPolicyId}</strong>`, 'success');
             btnSafe.disabled = false;
             btnHighRisk.disabled = false;
-            
+
             // Enable our new demo button
-            btnExpensiveApi.disabled = false; 
-            
+            btnExpensiveApi.disabled = false;
+
             btnCreate.disabled = true;
             btnCreate.textContent = "Policy Active";
         } else {
@@ -188,13 +188,20 @@ btnUnlock.addEventListener('click', async () => {
 });
 
 // NEW EXPENSIVE API DEMO FLOW
+const geminiTaskInput = document.getElementById('gemini-task-input');
+
 btnExpensiveApi.addEventListener('click', async () => {
-    log(`[Agent] Requesting permission to use Premium API...`, 'info');
-    log(`[Agent] Target: ${NGROK_URL}`, 'info');
+    const taskText = geminiTaskInput.value.trim();
+    if (!taskText) {
+        log(`Error: Please enter a task for the agent.`, 'error');
+        return;
+    }
+
+    log(`[Agent] Generating intent for task via Gemini...`, 'info');
 
     try {
-        // STEP 1: Intercept and ask Sentinel-Auth
-        const sentinelRes = await fetch(`${API_BASE}/v1/authorize`, {
+        // STEP 1: Generate Intent via Gemini
+        const intentRes = await fetch(`${API_BASE}/v1/agent/intent`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -202,31 +209,46 @@ btnExpensiveApi.addEventListener('click', async () => {
             },
             body: JSON.stringify({
                 policy_id: currentPolicyId,
-                requester: "agent://data_scraper",
-                action: {
-                    type: "premium_compute",
-                    http_method: "POST",
-                    resource: NGROK_URL, 
-                    amount_usd: 10000 // Forces the flag because policy max is $5000
-                },
-                reasoning_trace: "Running intensive data aggregation model on the external ngrok compute cluster."
+                task: taskText
             })
         });
 
-        // STEP 2: Evaluate Sentinel's Decision
+        if (!intentRes.ok) {
+            const data = await intentRes.json();
+            log(`Gemini Intent Generation Failed: ${JSON.stringify(data)}`, 'error');
+            return;
+        }
+
+        const agentIntent = await intentRes.json();
+        log(`[Agent] Intent generated: ${agentIntent.action.type} for $${agentIntent.action.amount_usd}`, 'info');
+        log(`[Agent] Reasoning: ${agentIntent.reasoning_trace}`, 'info');
+
+        // STEP 2: Ask Sentinel-Auth for authorization
+        log(`[Agent] Requesting permission from Sentinel-Auth...`, 'info');
+        const sentinelRes = await fetch(`${API_BASE}/v1/authorize`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': AUTH_HEADER
+            },
+            body: JSON.stringify(agentIntent)
+        });
+
+        // STEP 3: Evaluate Sentinel's Decision
         if (sentinelRes.status === 403) {
             const data = await sentinelRes.json();
             log(`🚨 FLAG TRIPPED: Sentinel-Auth blocked the request!`, 'error');
             log(`Reason: ${data.detail.error.message}`, 'error');
             log(`The expensive ngrok API was NOT called.`, 'success');
         } else if (sentinelRes.status === 402) {
-             log(`🚨 FLAG TRIPPED: 402 Payment Required!`, 'error');
-             log(`Action exceeds risk threshold. Solana x402 verification required before calling ngrok.`, 'info');
+            const data = await sentinelRes.json();
+            log(`🚨 FLAG TRIPPED: 402 Payment Required!`, 'error');
+            log(`Action exceeds risk threshold. Solana x402 verification required before calling ngrok.`, 'warning');
         } else if (sentinelRes.ok) {
             const data = await sentinelRes.json();
-            log(`Sentinel Approved. Receipt: ${data.receipt_signature}`, 'success');
-            
-            // STEP 3: Actually execute the expensive API call since it was approved
+            log(`Sentinel Approved. Receipt: <a href="https://explorer.solana.com/tx/${data.receipt_signature}?cluster=devnet" target="_blank" style="color:var(--solana-green)">${data.receipt_signature.substring(0, 25)}...</a>`, 'success');
+
+            // STEP 4: Actually execute the expensive API call since it was approved
             log(`Executing request to ${NGROK_URL}...`, 'info');
             try {
                 const targetRes = await fetch(NGROK_URL, {
