@@ -103,6 +103,19 @@ async def verify_api_key(
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing API Key")
 
 
+async def verify_admin_key(
+    authorization_header: str | None = Security(api_key_header),
+    x_api_key: str | None = Security(x_api_key_header),
+):
+    candidate = extract_api_key(authorization_header, x_api_key)
+    if not candidate or not _is_admin_key(candidate):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint requires admin credentials",
+        )
+    return candidate
+
+
 async def verify_account_session(
     authorization_header: str | None = Security(api_key_header),
     x_session_token: str | None = Security(x_session_token_header),

@@ -3,21 +3,25 @@ from __future__ import annotations
 import logging
 import os
 import json
-import math
-import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-import google.generativeai as genai
-from dotenv import load_dotenv
-
-env_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), ".env.local")
-load_dotenv(env_path)
-
-from src.auth import api_key_prefix, generate_api_key, hash_api_key, verify_api_key
+from src.auth import (
+    api_key_prefix,
+    generate_api_key,
+    generate_session_token,
+    hash_api_key,
+    hash_password,
+    hash_session_token,
+    normalize_email,
+    verify_account_session,
+    verify_admin_key,
+    verify_api_key,
+    verify_password,
+)
 from src.database import Base, engine, get_db
 from src.models import (
     AccountDashboardResponse,
@@ -55,6 +59,7 @@ logger = logging.getLogger("SentinelAuth")
 
 HIGH_RISK_AMOUNT_USD = float(os.getenv("HIGH_RISK_AMOUNT_USD", "1000"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+ACCOUNT_SESSION_TTL_SECONDS = int(os.getenv("ACCOUNT_SESSION_TTL_SECONDS", "86400"))
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
@@ -102,6 +107,36 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+def resolve_public_base_url(request: Request) -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    return str(request.base_url).rstrip("/")
+
+
+def error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    request_id: str | None = None,
+    policy_id: str | None = None,
+    details: dict | None = None,
+) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail=ErrorEnvelope(
+            error={
+                "type": "policy_error" if status_code < 500 else "server_error",
+                "code": code,
+                "message": message,
+                "request_id": request_id,
+                "policy_id": policy_id,
+                "status": status_code,
+                "details": details or {},
+            }
+        ).model_dump()
+    )
 
 
 @app.get("/v1/public/overview", response_model=PublicApiOverview)
@@ -188,7 +223,12 @@ def account_dashboard(
 
 
 @app.post("/v1/developer/keys", response_model=IssueApiKeyResponse, status_code=status.HTTP_201_CREATED)
-def issue_developer_key(payload: IssueApiKeyRequest, request: Request, db: Session = Depends(get_db)):
+def issue_developer_key(
+    payload: IssueApiKeyRequest,
+    request: Request,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
     key = generate_api_key()
     prefix = api_key_prefix(key)
     store = DatabaseStore(db)
@@ -224,48 +264,10 @@ def rotate_developer_key(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Issue a brand-new API key for an existing client, invalidating the old one immediately."""
-    store = DatabaseStore(db)
-    existing = store.get_api_client_by_id(client_id)
-    if not existing:
-        raise error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="CLIENT_NOT_FOUND",
-            message="The requested API client does not exist.",
-        )
-    if existing.revoked_at is not None:
-        raise error_response(
-            status_code=status.HTTP_409_CONFLICT,
-            code="CLIENT_REVOKED",
-            message="Cannot rotate the key of a revoked API client.",
-        )
-
-    new_key = generate_api_key()
-    new_prefix = api_key_prefix(new_key)
-    updated = store.rotate_api_client_key(
-        client_id,
-        new_api_key_hash=hash_api_key(new_key),
-        new_api_key_prefix=new_prefix,
-    )
-    if not updated:
-        raise error_response(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            code="ROTATION_FAILED",
-            message="Key rotation failed unexpectedly.",
-        )
-
-    base_url = resolve_public_base_url(request)
-    return IssueApiKeyResponse(
-        client_id=updated.client_id,
-        app_name=updated.app_name,
-        owner_email=updated.owner_email,
-        api_key=new_key,
-        api_key_prefix=updated.api_key_prefix,
-        created_at=updated.created_at,
-        base_url=base_url,
-        docs_url=f"{base_url}/docs",
-        authorization_header=f"Bearer {new_key}",
-        example_policy_name=f"{updated.app_name} default policy",
+    raise error_response(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        code="KEY_ROTATION_UNAVAILABLE",
+        message="API key rotation is temporarily unavailable in this build.",
     )
 
 
@@ -275,20 +277,11 @@ def rotate_developer_key(
     dependencies=[Depends(verify_api_key)],
 )
 def revoke_developer_key(client_id: str, db: Session = Depends(get_db)):
-    """Soft-revoke an API key so it can no longer authenticate."""
-    store = DatabaseStore(db)
-    revoked = store.revoke_api_client(client_id)
-    if not revoked:
-        raise error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="CLIENT_NOT_FOUND",
-            message="The requested API client does not exist.",
-        )
-    return {
-        "client_id": revoked.client_id,
-        "revoked_at": revoked.revoked_at,
-        "message": "API key has been revoked.",
-    }
+    raise error_response(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        code="KEY_REVOCATION_UNAVAILABLE",
+        message="API key revocation is temporarily unavailable in this build.",
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -344,37 +337,12 @@ def update_policy(
 
     Returns the newly created policy version.
     """
-    store = DatabaseStore(db)
-    # Resolve to the current live version first (caller may pass root_id or any version id)
-    current = store.get_policy(policy_id)
-    if not current:
-        raise error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="POLICY_NOT_FOUND",
-            message="The requested policy does not exist.",
-            policy_id=policy_id,
-        )
-    if current.superseded_by is not None:
-        raise error_response(
-            status_code=status.HTTP_409_CONFLICT,
-            code="POLICY_ALREADY_SUPERSEDED",
-            message=(
-                "This policy version has already been superseded. "
-                f"Use the latest version: {current.superseded_by}"
-            ),
-            policy_id=policy_id,
-            details={"latest_policy_id": current.superseded_by},
-        )
-
-    new_policy = store.update_policy(policy_id, payload)
-    if not new_policy:
-        raise error_response(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            code="POLICY_UPDATE_FAILED",
-            message="Policy update failed unexpectedly.",
-            policy_id=policy_id,
-        )
-    return new_policy
+    raise error_response(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        code="POLICY_UPDATE_UNAVAILABLE",
+        message="Policy versioning is temporarily unavailable in this build.",
+        policy_id=policy_id,
+    )
 
 
 @app.get("/v1/policies", dependencies=[Depends(verify_api_key)])
@@ -383,10 +351,11 @@ def list_policies(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    """List the current (latest) version of every policy lineage, paginated."""
-    store = DatabaseStore(db)
-    policies, total = store.list_policies(limit=limit, offset=offset)
-    return _paginate([p.model_dump() for p in policies], total, limit, offset)
+    raise error_response(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        code="POLICY_LIST_UNAVAILABLE",
+        message="Policy listing is temporarily unavailable in this build.",
+    )
 
 
 @app.get("/v1/policies/{policy_id}", dependencies=[Depends(verify_api_key)])
@@ -409,21 +378,12 @@ def list_policy_versions(policy_id: str, db: Session = Depends(get_db)):
 
     Pass any version's ID — the endpoint resolves to the lineage root automatically.
     """
-    store = DatabaseStore(db)
-    policy = store.get_policy(policy_id)
-    if not policy:
-        raise error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="POLICY_NOT_FOUND",
-            message="The requested policy does not exist.",
-            policy_id=policy_id,
-        )
-    versions = store.list_policy_versions(policy.root_policy_id)
-    return {
-        "root_policy_id": policy.root_policy_id,
-        "total_versions": len(versions),
-        "versions": [v.model_dump() for v in versions],
-    }
+    raise error_response(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        code="POLICY_VERSION_HISTORY_UNAVAILABLE",
+        message="Policy version history is temporarily unavailable in this build.",
+        policy_id=policy_id,
+    )
 
 
 # Authorization
@@ -451,7 +411,7 @@ def authorize(
             policy_id=payload.policy_id,
         )
     # Warn callers who submit against a superseded version
-    if policy.superseded_by is not None:
+    if hasattr(policy, "superseded_by") and policy.superseded_by is not None:
         logger.warning(
             f"Authorization request uses superseded policy {payload.policy_id}. "
             f"Latest is {policy.superseded_by}."
@@ -680,7 +640,15 @@ def authorize(
 
 @app.post("/v1/agent/intent", dependencies=[Depends(verify_api_key)])
 def generate_agent_intent(payload: AgentIntentRequest):
-    from dotenv import dotenv_values
+    try:
+        import google.generativeai as genai
+        from dotenv import dotenv_values
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini dependencies are not installed on this server.",
+        ) from exc
+
     env_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), ".env.local")
     logger.info(f"Loading dot env from {env_path}")
     env = dotenv_values(env_path)
@@ -821,11 +789,7 @@ def verify_proof(payload: VerifyProofRequest, db: Session = Depends(get_db)):
 def list_audits(
     policy_id: str,
     status_filter: str | None = Query(default=None, alias="status"),
-    action_type: str | None = Query(default=None),
     created_after: datetime | None = Query(default=None),
-    sort: str = Query(default="desc", pattern="^(asc|desc)$"),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
     store = DatabaseStore(db)
@@ -836,15 +800,7 @@ def list_audits(
             message="The requested policy does not exist.",
             policy_id=policy_id,
         )
-    audits, total = store.list_audits(
-        policy_id,
-        status=status_filter,
-        created_after=created_after,
-        action_type=action_type,
-        sort=sort,  # type: ignore[arg-type]
-        limit=limit,
-        offset=offset,
-    )
-    result = _paginate([a.model_dump() for a in audits], total, limit, offset)
-    result["policy_id"] = policy_id
-    return result
+    return {
+        "policy_id": policy_id,
+        "data": [audit.model_dump() for audit in store.list_audits(policy_id, status_filter, created_after)],
+    }
