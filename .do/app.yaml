@@ -25,6 +25,8 @@ services:
   - key: SOLANA_PRIVATE_KEY
     scope: RUN_TIME
     value: "[231,178,129,90,93,203,217,120,116,162,83,6,33,255,65,211,205,139,193,95,222,25,155,215,196,100,147,54,122,246,27,120,62,48,27,23,39,184,197,252,62,168,163,206,46,13,159,135,84,7,207,172,249,106,60,189,204,37,131,67,80,54,93,75]"
+  routes:
+  - path: /server
   http_port: 8000
 
 static_sites:
@@ -35,23 +37,14 @@ static_sites:
   source_dir: frontend
   build_command: npm run build
   output_dir: dist
+  routes:
+  - path: /
   envs:
   - key: VITE_API_BASE
     scope: RUN_AND_BUILD_TIME
-    value: /server
+    value: ${api.APP_URL}/server
 
-ingress:
-  rules:
-  - match:
-      path:
-        prefix: /server
-    component:
-      name: api
-  - match:
-      path:
-        prefix: /
-    component:
-      name: frontend
+# Removed top-level ingress in favor of component-level routes for better prefix stripping.
 
 databases:
 - engine: PG
