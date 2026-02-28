@@ -274,6 +274,14 @@ textarea {
     gap: 14px;
 }
 
+.activity-grid code {
+    display: block;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    margin-top: 4px;
+}
+
 .summary-card {
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.56);
@@ -437,6 +445,8 @@ textarea {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     font-size: 0.92rem;
     line-height: 1.55;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .log-entry:last-child {
@@ -466,6 +476,7 @@ a {
 }
 
 @media (max-width: 960px) {
+
     .grid,
     .hero-meta,
     .summary-grid,
