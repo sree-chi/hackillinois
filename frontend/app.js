@@ -1,6 +1,6 @@
 import * as solanaWeb3 from '@solana/web3.js';
 
-const API_BASE = 'https://hackillinois-tbrqg.ondigitalocean.app';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 const AUTH_HEADER = 'Bearer hackillinois_2026_super_secret';
 const btnExpensiveApi = document.getElementById('btn-expensive-api');
 const NGROK_URL = 'https://nonobservant-patrick-catchingly.ngrok-free.dev/';
