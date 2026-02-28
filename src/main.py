@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from src.auth import (
     api_key_prefix,
@@ -70,10 +71,47 @@ ALLOWED_ORIGINS = [
 ]
 
 
+def ensure_runtime_schema_compatibility() -> None:
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "policies" not in table_names:
+        return
+
+    policy_columns = {column["name"] for column in inspector.get_columns("policies")}
+    dialect = engine.dialect.name
+
+    statements: list[str] = []
+    if "version" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+    if "root_policy_id" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS root_policy_id VARCHAR")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN root_policy_id VARCHAR")
+    if "idempotency_key" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR")
+            statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_policies_idempotency_key ON policies (idempotency_key)")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN idempotency_key VARCHAR")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            logger.warning("Applying runtime schema compatibility patch: %s", statement)
+            connection.execute(text(statement))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if str(engine.url) != "sqlite:///:memory:":
         Base.metadata.create_all(bind=engine)
+        ensure_runtime_schema_compatibility()
     yield
 
 
