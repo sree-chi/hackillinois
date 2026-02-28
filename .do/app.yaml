@@ -39,12 +39,6 @@ static_sites:
   output_dir: dist
   routes:
   - path: /
-  envs:
-  - key: VITE_API_BASE
-    scope: RUN_AND_BUILD_TIME
-    value: ${api.APP_URL}/server
-
-# Removed top-level ingress in favor of component-level routes for better prefix stripping.
 
 databases:
 - engine: PG
