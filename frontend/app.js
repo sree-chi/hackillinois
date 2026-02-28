@@ -12,6 +12,7 @@ let currentSessionToken = localStorage.getItem(STORAGE_KEYS.sessionToken) || "";
 let currentAccount = null;
 let currentLinkedWallets = [];
 let selectedWalletAddress = "";
+let phantomProviderReady = false;
 
 const docsLink = document.getElementById("docs-link");
 const apiBaseLabel = document.getElementById("api-base-label");
@@ -116,6 +117,11 @@ function bytesToBase64(bytes) {
     return window.btoa(chars);
 }
 
+function setWalletStatus(message, type = "info") {
+    walletStatus.textContent = message;
+    walletStatus.dataset.state = type;
+}
+
 function resetWalletOverview(message = "Link a wallet to load recent transactions.") {
     walletAddressLabel.textContent = "No wallet selected.";
     walletBalanceLabel.textContent = "0 SOL";
@@ -128,11 +134,11 @@ function renderLinkedWallets(wallets) {
     currentLinkedWallets = wallets;
     if (!wallets.length) {
         walletList.innerHTML = '<div class="empty-state">No wallets linked to this account.</div>';
-        walletStatus.textContent = "No wallet linked yet.";
+        setWalletStatus(phantomProviderReady ? "No wallet linked yet." : "Phantom wallet not detected yet.");
         return;
     }
 
-    walletStatus.textContent = `${wallets.length} wallet${wallets.length === 1 ? "" : "s"} linked to this account.`;
+    setWalletStatus(`${wallets.length} wallet${wallets.length === 1 ? "" : "s"} linked to this account.`, "success");
     walletList.innerHTML = wallets.map((wallet) => `
         <article class="activity-card ${wallet.wallet_address === selectedWalletAddress ? "activity-success" : ""}">
             <div class="activity-header">
@@ -176,8 +182,24 @@ function renderWalletOverview(overview) {
 }
 
 function getPhantomProvider() {
-    const provider = window.phantom?.solana;
+    const provider = window.phantom?.solana || window.solana;
     return provider?.isPhantom ? provider : null;
+}
+
+function updateWalletProviderState() {
+    phantomProviderReady = Boolean(getPhantomProvider());
+    if (!currentSessionToken) {
+        setWalletStatus("Sign in to connect a Phantom wallet.");
+        return;
+    }
+    if (!currentLinkedWallets.length) {
+        setWalletStatus(
+            phantomProviderReady
+                ? "Phantom detected. Connect your wallet to link it to this account."
+                : "Phantom wallet was not detected. Open this site on HTTPS or localhost with the extension enabled.",
+            phantomProviderReady ? "success" : "error",
+        );
+    }
 }
 
 function updateSnippets() {
@@ -274,6 +296,7 @@ function updateDashboardState() {
     connectWalletButton.disabled = !signedIn;
     refreshWalletButton.disabled = !(signedIn && selectedWalletAddress);
     unlinkWalletButton.disabled = !(signedIn && selectedWalletAddress);
+    updateWalletProviderState();
 }
 
 async function fetchDashboard() {
@@ -421,17 +444,20 @@ walletList.addEventListener("click", async (event) => {
 
 connectWalletButton.addEventListener("click", async () => {
     if (!currentSessionToken) {
+        log("Sign in before linking a wallet.", "error");
         return;
     }
 
     const provider = getPhantomProvider();
     if (!provider) {
+        setWalletStatus("Phantom wallet was not detected. Open this site on HTTPS or localhost with the extension enabled.", "error");
         log("Phantom wallet was not detected. Install Phantom and open this site on HTTPS or localhost.", "error");
         return;
     }
 
     try {
-        const connection = await provider.connect();
+        setWalletStatus("Connecting to Phantom...", "info");
+        const connection = await provider.connect({ onlyIfTrusted: false });
         const walletAddress = connection.publicKey?.toString() || provider.publicKey?.toString();
         if (!walletAddress) {
             throw new Error("Phantom did not return a wallet address.");
@@ -472,14 +498,17 @@ connectWalletButton.addEventListener("click", async () => {
 
         selectedWalletAddress = linkedWallet.wallet_address;
         await fetchDashboard();
+        setWalletStatus(`Linked wallet ${linkedWallet.wallet_address}`, "success");
         log(`Linked Phantom wallet ${linkedWallet.wallet_address}`, "success");
     } catch (error) {
+        setWalletStatus(`Wallet link failed: ${error.message}`, "error");
         log(`Wallet link failed: ${error.message}`, "error");
     }
 });
 
 refreshWalletButton.addEventListener("click", async () => {
     if (!selectedWalletAddress) {
+        log("Select a linked wallet before refreshing.", "error");
         return;
     }
     try {
@@ -491,6 +520,7 @@ refreshWalletButton.addEventListener("click", async () => {
 
 unlinkWalletButton.addEventListener("click", async () => {
     if (!selectedWalletAddress) {
+        log("Select a linked wallet before unlinking.", "error");
         return;
     }
 
@@ -508,8 +538,10 @@ unlinkWalletButton.addEventListener("click", async () => {
         const removedWallet = selectedWalletAddress;
         selectedWalletAddress = "";
         await fetchDashboard();
+        setWalletStatus(`Unlinked wallet ${removedWallet}`, "info");
         log(`Unlinked wallet ${removedWallet}`, "success");
     } catch (error) {
+        setWalletStatus(`Wallet unlink failed: ${error.message}`, "error");
         log(`Wallet unlink failed: ${error.message}`, "error");
     }
 });
@@ -632,6 +664,7 @@ copyJsButton.addEventListener("click", () => copyText(jsSnippet.textContent, cop
 
 loadOverview();
 updateSnippets();
+updateWalletProviderState();
 if (currentApiKey) {
     issuedKey.textContent = currentApiKey;
     issuedKeyMeta.textContent = "Loaded latest API key from local browser storage.";
@@ -642,3 +675,6 @@ if (currentPolicyId) {
 fetchDashboard();
 updateDashboardState();
 log("Account dashboard ready.");
+
+window.addEventListener("focus", updateWalletProviderState);
+window.addEventListener("load", updateWalletProviderState);
