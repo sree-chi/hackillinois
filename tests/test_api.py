@@ -65,6 +65,52 @@ def create_default_policy() -> str:
     return response.json()["id"]
 
 
+def issue_public_key() -> str:
+    response = client.post(
+        "/v1/developer/keys",
+        json={
+            "app_name": "Portal Test App",
+            "owner_name": "Portal Owner",
+            "owner_email": "owner@example.com",
+            "use_case": "Testing public onboarding",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["api_key"]
+
+
+def test_public_key_issuance_returns_live_key_material():
+    response = client.post(
+        "/v1/developer/keys",
+        json={
+            "app_name": "Public Portal App",
+            "owner_email": "founder@example.com",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["api_key"].startswith("ska_live_")
+    assert body["authorization_header"].startswith("Bearer ska_live_")
+    assert body["docs_url"].endswith("/docs")
+
+
+def test_issued_public_key_can_access_protected_endpoints():
+    api_key = issue_public_key()
+
+    response = client.post(
+        "/v1/policies",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "name": "Public key policy",
+            "rules": {"allowed_http_methods": ["GET"]},
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Public key policy"
+
+
 def test_create_policy_is_idempotent():
     first = client.post(
         "/v1/policies",

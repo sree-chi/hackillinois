@@ -1,98 +1,79 @@
-# Sentinel-Auth: The Policy-Gated API Proxy 🛡️
+# Sentinel Auth
 
-**Sentinel-Auth** is a next-generation middleware API designed for the agentic web (2026+). It acts as a "Safety Buffer" between autonomous AI agents and critical backend infrastructure, preventing "Prompt Injection" and "Agent Drift" from executing catastrophic API calls (e.g., `DELETE /account`).
+Sentinel Auth is a policy gateway for AI agents. It issues developer API keys, lets teams define action policies, and evaluates each agent request against those rules before the action reaches downstream infrastructure.
 
-Instead of simply verifying if an API key is valid, Sentinel-Auth inspects the **intent** of the request against strict, pre-defined safety policies, utilizing **Solana's Alpenglow 150ms finality** for real-time cryptographic verification and x402 micro-payments for high-risk actions.
+## What changed
 
----
+- Public developer onboarding via `POST /v1/developer/keys`
+- Per-client API keys stored as hashes instead of one shared hardcoded secret
+- Developer portal UI for issuing a key, copying quickstart snippets, and testing `/v1/authorize`
+- Existing policy, proof verification, audit, and high-risk Solana receipt flows remain available
 
-## 🌟 Key Features (Built for Stripe's Best Web API Metrics)
+## Public onboarding flow
 
-1. **Stateful Policy Engine & Safety Limits**
-   Enforce rate limits, maximum spend thresholds, and HTTP method restrictions per AI agent. State is managed gracefully to ensure predictable AI behavior without silent failures.
+1. Open the frontend developer portal.
+2. Create a key from the form or call `POST /v1/developer/keys`.
+3. Use the returned key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+4. Create a policy with `POST /v1/policies`.
+5. Send every agent action through `POST /v1/authorize`.
 
-2. **Solana-Backed Immutable Audit Trails ("Safety Receipts")**
-   Every allowed intent is hashed (SHA-256) and anchored to the Solana blockchain as a micro-transaction, providing a cryptographically verifiable history of what an agent intended to do at any millisecond in time.
-
-3. **x402 "Pay-per-Safety" Protocol**
-   High-risk actions (e.g., moving >$1000) trigger an `HTTP 402 Payment Required` response. The AI agent (via its integrated Phantom/Solana wallet) must autonomously sign a micro-transaction fee (`x-solana-tx-signature`) to unlock the audit verification before the API proceeds.
-
-4. **World-Class Developer Experience (DX)**
-   Built on FastAPI, delivering strict OpenAPI specifications and highly informative, standardized Error Envelope schemas (e.g., `POLICY_LIMIT_EXCEEDED`) so developers can debug agent behavior immediately.
-
----
-
-## ⚡ Quick Start: 7 Lines to Safety
-
-Integrating Sentinel-Auth is as simple as routing your agent's proposed HTTP action through the `/v1/authorize` decision engine:
+## Example: issue a key
 
 ```bash
-curl -X POST https://hackillinois-tbrqg.ondigitalocean.app/v1/authorize \
-  -H "Authorization: Bearer hackillinois_2026_super_secret" \
+curl -X POST http://localhost:8000/v1/developer/keys \
   -H "Content-Type: application/json" \
   -d '{
-    "policy_id": "pol_70bf5edaa66241e4a6c65a89",
-    "requester": "agent://trading_bot_alpha",
-    "reasoning_trace": "Market conditions optimal. Initiating $500 stablecoin purchase.",
-    "action": {
-      "type": "wire_transfer",
-      "http_method": "POST",
-      "resource": "/api/exchange/buy",
-      "amount_usd": 500
+    "app_name": "Atlas Agent Ops",
+    "owner_email": "team@example.com",
+    "owner_name": "Atlas Team",
+    "use_case": "Managing support and treasury agents."
+  }'
+```
+
+## Example: create a policy with an issued key
+
+```bash
+curl -X POST http://localhost:8000/v1/policies \
+  -H "Authorization: Bearer ska_live_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Agent spending policy",
+    "rules": {
+      "allowed_http_methods": ["GET", "POST"],
+      "max_spend_usd": 5000,
+      "max_requests_per_minute": 60
     }
   }'
 ```
 
-**Success Response (200 OK):**
-```json
-{
-  "request_id": "req_c29ab09b456f488d8a509605",
-  "policy_id": "pol_70bf5edaa66241e4a6c65a89",
-  "allowed": true,
-  "decision": "allow",
-  "receipt_status": "anchored",
-  "receipt_signature": "5Hq2... (Solana TX Hash)",
-  "violation": null
-}
+## Core endpoints
+
+- `GET /v1/public/overview`
+- `POST /v1/developer/keys`
+- `POST /v1/policies`
+- `GET /v1/policies/{policy_id}`
+- `POST /v1/authorize`
+- `POST /v1/proofs/verify`
+- `GET /v1/audits/{policy_id}`
+
+## Local development
+
+Backend:
+
+```bash
+uvicorn src.main:app --reload
 ```
 
----
+Frontend:
 
-## 🏛️ Architecture & Tech Stack
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-- **Backend:** Python + FastAPI (Strict Pydantic Type Validation)
-- **Database:** PostgreSQL (DigitalOcean Managed) + SQLAlchemy
-- **Blockchain:** `@solana/web3.js` + Devnet for real-time x402 intent verification.
-- **Frontend / Demo UI:** React/Vite + Vanilla CSS (Live simulated environment)
-- **Deployment:** DigitalOcean App Platform (Dockerized)
+## Notes
 
----
-
-## 📖 API Reference
-
-Complete interactive Swagger UI Documentation is available at:
-👉 **[https://hackillinois-tbrqg.ondigitalocean.app/docs](https://hackillinois-tbrqg.ondigitalocean.app/docs)**
-
-### Core Endpoints
-- `POST /v1/policies`: Create a new Safety Profile for an agent (supports `Idempotency-Key`).
-- `GET /v1/policies/{id}`: Retrieve policy details.
-- `POST /v1/authorize`: The core decision engine. Submits an intent for approval.
-- `GET /v1/audits/{policy_id}`: Retrieve the immutable history of blocked and allowed actions.
-
----
-
-## 🚀 Running the Demo Locally
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-repo/hackillinois.git
-   cd hackillinois/frontend
-   ```
-
-2. Install dependencies & run the Vite UI:
-   ```bash
-   npm install
-   npm run dev
-   ```
-
-3. Open your browser to `http://localhost:5173`. Make sure you have the **Phantom Wallet** browser extension installed and set to Solana Devnet to handle x402 high-risk verifications!
+- The legacy admin key from `API_KEY` still works for internal/dev access.
+- Issued developer keys are only returned in plaintext once at creation time.
+- Public response URLs can be pinned with `PUBLIC_BASE_URL`.

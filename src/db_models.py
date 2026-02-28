@@ -68,3 +68,18 @@ class AuthorizationProofModel(Base):
     schema_version = Column(String, nullable=False)
     issued_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class ApiClientModel(Base):
+    __tablename__ = "api_clients"
+
+    client_id = Column(String, primary_key=True, index=True)
+    app_name = Column(String(100), nullable=False)
+    owner_name = Column(String(100), nullable=True)
+    owner_email = Column(String(200), nullable=False, index=True)
+    use_case = Column(String(500), nullable=True)
+    api_key_hash = Column(String(64), nullable=False, unique=True, index=True)
+    api_key_prefix = Column(String(24), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)

@@ -5,11 +5,11 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from src.auth import verify_api_key
+from src.auth import api_key_prefix, generate_api_key, hash_api_key, verify_api_key
 from src.database import Base, engine, get_db
 from src.models import (
     AuditRecord,
@@ -17,8 +17,11 @@ from src.models import (
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
+    PublicApiOverview,
     CreatePolicyRequest,
     ErrorEnvelope,
+    IssueApiKeyRequest,
+    IssueApiKeyResponse,
     ReceiptStatus,
     SafetyViolation,
     VerifyProofRequest,
@@ -36,6 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger("SentinelAuth")
 
 HIGH_RISK_AMOUNT_USD = float(os.getenv("HIGH_RISK_AMOUNT_USD", "1000"))
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
@@ -73,16 +77,64 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {
-        "name": "Sentinel-Auth API",
+        "name": "Sentinel Auth API",
         "status": "online",
         "docs_url": "/docs",
-        "message": "Welcome to the Sentinel-Auth API. Please use the /v1 endpoints."
+        "message": "Public API for issuing agent keys, creating policies, and authorizing AI actions.",
     }
 
 
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+def resolve_public_base_url(request: Request) -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    return str(request.base_url).rstrip("/")
+
+
+@app.get("/v1/public/overview", response_model=PublicApiOverview)
+def public_overview(request: Request):
+    base_url = resolve_public_base_url(request)
+    return PublicApiOverview(
+        name="Sentinel Auth API",
+        status="online",
+        docs_url=f"{base_url}/docs",
+        key_endpoint=f"{base_url}/v1/developer/keys",
+        quickstart=[
+            "Create a developer key from the public portal or POST /v1/developer/keys.",
+            "Send the key as Authorization: Bearer <key> or X-API-Key.",
+            "Create a policy, then route each agent action through /v1/authorize.",
+        ],
+        sample_policy_rules={
+            "allowed_http_methods": ["GET", "POST"],
+            "max_spend_usd": 5000,
+            "max_requests_per_minute": 60,
+        },
+    )
+
+
+@app.post("/v1/developer/keys", response_model=IssueApiKeyResponse, status_code=status.HTTP_201_CREATED)
+def issue_developer_key(payload: IssueApiKeyRequest, request: Request, db: Session = Depends(get_db)):
+    key = generate_api_key()
+    prefix = api_key_prefix(key)
+    store = DatabaseStore(db)
+    client = store.create_api_client(payload, api_key_hash=hash_api_key(key), api_key_prefix=prefix)
+    base_url = resolve_public_base_url(request)
+    return IssueApiKeyResponse(
+        client_id=client.client_id,
+        app_name=client.app_name,
+        owner_email=client.owner_email,
+        api_key=key,
+        api_key_prefix=client.api_key_prefix,
+        created_at=client.created_at,
+        base_url=base_url,
+        docs_url=f"{base_url}/docs",
+        authorization_header=f"Bearer {key}",
+        example_policy_name=f"{client.app_name} default policy",
+    )
 
 
 @app.post("/v1/dev/reset-db", dependencies=[Depends(verify_api_key)])

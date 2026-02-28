@@ -5,18 +5,71 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from src.db_models import (
+    ApiClientModel,
     AuditRecordModel,
     AuditStatusEnum,
     AuthorizationProofModel,
     PolicyModel,
     ReceiptStatusEnum,
 )
-from src.models import AuditRecord, AuthorizationProof, CreatePolicyRequest, Policy, canonical_hash
+from src.models import (
+    ApiClientRecord,
+    AuditRecord,
+    AuthorizationProof,
+    CreatePolicyRequest,
+    IssueApiKeyRequest,
+    Policy,
+    canonical_hash,
+)
 
 
 class DatabaseStore:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def create_api_client(
+        self,
+        payload: IssueApiKeyRequest,
+        api_key_hash: str,
+        api_key_prefix: str,
+    ) -> ApiClientRecord:
+        client = ApiClientRecord(
+            app_name=payload.app_name,
+            owner_name=payload.owner_name,
+            owner_email=payload.owner_email,
+            use_case=payload.use_case,
+            api_key_prefix=api_key_prefix,
+        )
+
+        db_client = ApiClientModel(
+            client_id=client.client_id,
+            app_name=client.app_name,
+            owner_name=client.owner_name,
+            owner_email=client.owner_email,
+            use_case=client.use_case,
+            api_key_hash=api_key_hash,
+            api_key_prefix=client.api_key_prefix,
+            created_at=client.created_at,
+        )
+        self.db.add(db_client)
+        self.db.commit()
+        self.db.refresh(db_client)
+        return client
+
+    def get_api_client_by_hash(self, api_key_hash: str) -> ApiClientRecord | None:
+        db_client = self.db.query(ApiClientModel).filter(ApiClientModel.api_key_hash == api_key_hash).first()
+        if not db_client:
+            return None
+
+        return ApiClientRecord.model_validate(db_client)
+
+    def mark_api_client_used(self, client_id: str) -> None:
+        db_client = self.db.query(ApiClientModel).filter(ApiClientModel.client_id == client_id).first()
+        if not db_client:
+            return
+
+        db_client.last_used_at = datetime.now(timezone.utc)
+        self.db.commit()
 
     def create_policy(self, payload: CreatePolicyRequest, idempotency_key: str | None) -> Policy:
         if idempotency_key:
