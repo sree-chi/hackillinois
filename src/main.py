@@ -255,7 +255,11 @@ def authorize(
             f"High-risk action detected (amount: ${payload.action.amount_usd}). Verifying x402 payment signature..."
         )
         try:
-            verified = receipt_service.verify_high_risk_signature(x_solana_tx_signature, payment_verification_payload)
+            verified = receipt_service.verify_high_risk_signature(
+                x_solana_tx_signature,
+                payment_verification_payload,
+                action_hash=action_hash,
+            )
         except SolanaVerificationError as exc:
             logger.exception("x402 verification failed due to Solana verification error")
             raise error_response(
