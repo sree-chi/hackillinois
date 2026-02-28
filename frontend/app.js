@@ -14,14 +14,16 @@ const btnHighRisk = document.getElementById('btn-high-risk');
 const btnUnlock = document.getElementById('btn-unlock');
 
 function resolveApiBase() {
+    let base;
     const configuredBase = import.meta.env.VITE_API_BASE?.trim();
     if (configuredBase) {
-        return configuredBase.replace(/\/$/, '');
+        base = configuredBase.replace(/\/+$/, '');
+    } else {
+        const { origin, hostname } = window.location;
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+        base = isLocalhost ? 'http://localhost:8000' : `${origin}/server`;
     }
-
-    const { origin, hostname } = window.location;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    return isLocalhost ? 'http://localhost:8000' : `${origin}/server`;
+    return base.replace(/([^:]\/)\/+/g, "$1"); // Normalize internal double slashes
 }
 
 async function readApiResponse(res) {
