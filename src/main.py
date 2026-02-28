@@ -475,6 +475,27 @@ def issue_developer_key(
     )
 
 
+@app.delete("/v1/accounts/me/keys/{client_id}", status_code=status.HTTP_200_OK)
+def delete_account_api_key(
+    client_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    client = store.revoke_api_client_for_account(account.account_id, client_id)
+    if not client:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="API_KEY_NOT_FOUND",
+            message="The requested API key does not exist for this account.",
+        )
+    return {
+        "status": "success",
+        "client_id": client.client_id,
+        "revoked_at": client.revoked_at,
+    }
+
+
 @app.post(
     "/v1/developer/keys/{client_id}/rotate",
     response_model=IssueApiKeyResponse,
@@ -495,14 +516,25 @@ def rotate_developer_key(
 @app.delete(
     "/v1/developer/keys/{client_id}",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(verify_api_key)],
 )
-def revoke_developer_key(client_id: str, db: Session = Depends(get_db)):
-    raise error_response(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        code="KEY_REVOCATION_UNAVAILABLE",
-        message="API key revocation is temporarily unavailable in this build.",
-    )
+def revoke_developer_key(
+    client_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    client = store.revoke_api_client_for_account(account.account_id, client_id)
+    if not client:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="API_KEY_NOT_FOUND",
+            message="The requested API key does not exist for this account.",
+        )
+    return {
+        "status": "success",
+        "client_id": client.client_id,
+        "revoked_at": client.revoked_at,
+    }
 
 
 # ─────────────────────────────────────────────────────────────

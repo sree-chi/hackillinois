@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
 let currentApiKey = localStorage.getItem(STORAGE_KEYS.apiKey) || "";
 let currentPolicyId = localStorage.getItem(STORAGE_KEYS.policyId) || "";
 let currentSessionToken = localStorage.getItem(STORAGE_KEYS.sessionToken) || "";
+let currentIssuedClientId = "";
 let currentAccount = null;
 let currentLinkedWallets = [];
 let selectedWalletAddress = "";
@@ -259,9 +260,23 @@ function renderApiKeys(apiKeys) {
                     <p class="activity-title">${entry.app_name}</p>
                     <p class="activity-meta">${entry.owner_email} | Created ${new Date(entry.created_at).toLocaleString()}</p>
                 </div>
-                <span class="status-pill status-success">${entry.revoked_at ? "revoked" : "active"}</span>
+                <div class="action-row">
+                    <span class="status-pill ${entry.revoked_at ? "status-danger" : "status-success"}">${entry.revoked_at ? "revoked" : "active"}</span>
+                    <button
+                        class="btn btn-ghost"
+                        type="button"
+                        data-revoke-key="${entry.client_id}"
+                        ${entry.revoked_at ? "disabled" : ""}
+                    >
+                        Delete
+                    </button>
+                </div>
             </div>
-            <p class="activity-message">Prefix ${entry.api_key_prefix}${entry.last_used_at ? ` | Last used ${new Date(entry.last_used_at).toLocaleString()}` : " | Not used yet"}</p>
+            <p class="activity-message">
+                Prefix ${entry.api_key_prefix}
+                ${entry.last_used_at ? ` | Last used ${new Date(entry.last_used_at).toLocaleString()}` : " | Not used yet"}
+                ${entry.revoked_at ? ` | Revoked ${new Date(entry.revoked_at).toLocaleString()}` : ""}
+            </p>
         </article>
     `).join("");
 }
@@ -442,6 +457,43 @@ walletList.addEventListener("click", async (event) => {
     }
 });
 
+apiKeyList.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-revoke-key]");
+    if (!button || !currentSessionToken) {
+        return;
+    }
+
+    const clientId = button.dataset.revokeKey;
+    button.disabled = true;
+    try {
+        const response = await fetch(`${API_BASE}/v1/accounts/me/keys/${clientId}`, {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${currentSessionToken}`,
+            },
+        });
+        const data = await readApiResponse(response);
+        if (!response.ok) {
+            throw new Error(JSON.stringify(data));
+        }
+
+        if (currentApiKey && currentIssuedClientId === clientId) {
+            currentApiKey = "";
+            currentIssuedClientId = "";
+            localStorage.removeItem(STORAGE_KEYS.apiKey);
+            issuedKey.textContent = "Key deleted.";
+            issuedKeyMeta.textContent = "The selected API key was revoked.";
+        }
+        updateSnippets();
+        updateDashboardState();
+        await fetchDashboard();
+        log(`Deleted API key ${clientId}`, "success");
+    } catch (error) {
+        button.disabled = false;
+        log(`API key deletion failed: ${error.message}`, "error");
+    }
+});
+
 connectWalletButton.addEventListener("click", async () => {
     if (!currentSessionToken) {
         log("Sign in before linking a wallet.", "error");
@@ -568,9 +620,10 @@ issueKeyForm.addEventListener("submit", async (event) => {
         }
 
         currentApiKey = data.api_key;
+        currentIssuedClientId = data.client_id;
         saveLocalState();
         issuedKey.textContent = data.api_key;
-        issuedKeyMeta.textContent = `Prefix ${data.api_key_prefix} issued for ${data.owner_email}.`;
+        issuedKeyMeta.textContent = `Prefix ${data.api_key_prefix} issued for ${data.owner_email}. Client ${data.client_id}.`;
         updateSnippets();
         updateDashboardState();
         await fetchDashboard();

@@ -135,6 +135,45 @@ def test_account_dashboard_lists_issued_keys():
     assert body["linked_wallets"] == []
 
 
+def test_account_can_revoke_its_api_key():
+    session_token = create_account_session()
+    issue = client.post(
+        "/v1/developer/keys",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "app_name": "Revocable App",
+            "owner_name": "Portal Owner",
+        },
+    )
+    assert issue.status_code == 201
+    issued = issue.json()
+
+    revoke = client.delete(
+        f"/v1/accounts/me/keys/{issued['client_id']}",
+        headers={"Authorization": f"Bearer {session_token}"},
+    )
+    assert revoke.status_code == 200
+    assert revoke.json()["client_id"] == issued["client_id"]
+    assert revoke.json()["revoked_at"] is not None
+
+    dashboard = client.get(
+        "/v1/accounts/me/dashboard",
+        headers={"Authorization": f"Bearer {session_token}"},
+    )
+    assert dashboard.status_code == 200
+    assert dashboard.json()["api_keys"][0]["revoked_at"] is not None
+
+    denied = client.post(
+        "/v1/policies",
+        headers={"Authorization": f"Bearer {issued['api_key']}"},
+        json={
+            "name": "Should fail",
+            "rules": {"allowed_http_methods": ["GET"]},
+        },
+    )
+    assert denied.status_code == 401
+
+
 def test_can_link_wallet_to_account_and_fetch_overview():
     session_token = create_account_session()
     keypair = Keypair()

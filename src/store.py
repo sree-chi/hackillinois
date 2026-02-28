@@ -270,12 +270,34 @@ class DatabaseStore:
         row = self.db.query(ApiClientModel).filter(ApiClientModel.api_key_hash == api_key_hash).first()
         return ApiClientRecord.model_validate(row) if row else None
 
+    def get_api_client_by_id(self, client_id: str) -> ApiClientRecord | None:
+        row = self.db.query(ApiClientModel).filter(ApiClientModel.client_id == client_id).first()
+        return ApiClientRecord.model_validate(row) if row else None
+
     def mark_api_client_used(self, client_id: str) -> None:
         row = self.db.query(ApiClientModel).filter(ApiClientModel.client_id == client_id).first()
         if not row:
             return
         row.last_used_at = datetime.now(timezone.utc)
         self.db.commit()
+
+    def revoke_api_client_for_account(self, account_id: str, client_id: str) -> ApiClientRecord | None:
+        row = (
+            self.db.query(ApiClientModel)
+            .join(AccountApiClientModel, AccountApiClientModel.client_id == ApiClientModel.client_id)
+            .filter(
+                AccountApiClientModel.account_id == account_id,
+                ApiClientModel.client_id == client_id,
+            )
+            .first()
+        )
+        if not row:
+            return None
+        if row.revoked_at is None:
+            row.revoked_at = datetime.now(timezone.utc)
+            self.db.commit()
+            self.db.refresh(row)
+        return ApiClientRecord.model_validate(row)
 
     def create_policy(self, payload: CreatePolicyRequest, idempotency_key: str | None) -> Policy:
         if idempotency_key:
