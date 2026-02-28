@@ -1,7 +1,12 @@
 const API_BASE = resolveApiBase();
+const STORAGE_KEYS = {
+    apiBase: "sentinel.apiBase",
+    apiKey: "sentinel.apiKey",
+    policyId: "sentinel.policyId",
+};
 
-let currentApiKey = "";
-let currentPolicyId = "";
+let currentApiKey = localStorage.getItem(STORAGE_KEYS.apiKey) || "";
+let currentPolicyId = localStorage.getItem(STORAGE_KEYS.policyId) || "";
 
 const docsLink = document.getElementById("docs-link");
 const apiBaseLabel = document.getElementById("api-base-label");
@@ -33,6 +38,16 @@ function log(message, type = "info") {
     row.innerHTML = `<span class="log-time">[${time}]</span>${message}`;
     consoleEl.appendChild(row);
     consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function persistSession() {
+    localStorage.setItem(STORAGE_KEYS.apiBase, API_BASE);
+    if (currentApiKey) {
+        localStorage.setItem(STORAGE_KEYS.apiKey, currentApiKey);
+    }
+    if (currentPolicyId) {
+        localStorage.setItem(STORAGE_KEYS.policyId, currentPolicyId);
+    }
 }
 
 async function readApiResponse(response) {
@@ -147,6 +162,7 @@ issueKeyForm.addEventListener("submit", async (event) => {
         }
 
         currentApiKey = data.api_key;
+        persistSession();
         issuedKey.textContent = data.api_key;
         issuedKeyMeta.textContent = `Prefix ${data.api_key_prefix} issued for ${data.app_name}. Docs: ${data.docs_url}`;
         createPolicyButton.disabled = false;
@@ -194,6 +210,7 @@ createPolicyButton.addEventListener("click", async () => {
         }
 
         currentPolicyId = data.id;
+        persistSession();
         policyIdLabel.textContent = currentPolicyId;
         runAuthorizeButton.disabled = false;
         updateSnippets();
@@ -248,4 +265,16 @@ copyJsButton.addEventListener("click", () => copyText(jsSnippet.textContent, cop
 
 loadOverview();
 updateSnippets();
+if (currentApiKey) {
+    issuedKey.textContent = currentApiKey;
+    issuedKeyMeta.textContent = "Loaded from local browser storage.";
+    createPolicyButton.disabled = false;
+    copyKeyButton.disabled = false;
+    copyCurlButton.disabled = false;
+    copyJsButton.disabled = false;
+}
+if (currentPolicyId) {
+    policyIdLabel.textContent = currentPolicyId;
+    runAuthorizeButton.disabled = false;
+}
 log("Developer portal ready.");

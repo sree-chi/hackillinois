@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Auth Activity Feed</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="page-shell">
+        <main class="layout">
+            <nav class="topbar panel">
+                <a class="brand-link" href="/">Sentinel Auth</a>
+                <div class="topbar-links">
+                    <a class="topbar-link" href="/">Developer Portal</a>
+                    <a class="topbar-link topbar-link-active" href="/activity.html">Activity Feed</a>
+                </div>
+            </nav>
+
+            <section class="hero panel">
+                <p class="eyebrow">Transactions And Verifications</p>
+                <h1>See every authorization receipt, blocked action, and verification message in one place.</h1>
+                <p class="hero-copy">
+                    This page reads the audit trail for a policy and highlights the events that matter: successful
+                    approvals, failed checks, proof issuance, receipt anchoring, and high-risk verification states.
+                </p>
+            </section>
+
+            <section class="grid">
+                <section class="panel">
+                    <div class="section-heading">
+                        <p class="eyebrow">Access</p>
+                        <h2>Load a policy feed</h2>
+                    </div>
+                    <form id="activity-form" class="stack">
+                        <label>
+                            <span>API base URL</span>
+                            <input id="activity-api-base" type="text" placeholder="http://localhost:8000">
+                        </label>
+                        <label>
+                            <span>API key</span>
+                            <input id="activity-api-key" type="text" placeholder="ska_live_...">
+                        </label>
+                        <label>
+                            <span>Policy ID</span>
+                            <input id="activity-policy-id" type="text" placeholder="pol_...">
+                        </label>
+                        <div class="action-row">
+                            <button id="load-activity-button" class="btn btn-primary" type="submit">Load activity</button>
+                            <button id="clear-activity-button" class="btn btn-ghost" type="button">Clear saved context</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <p class="eyebrow">Summary</p>
+                        <h2>Important messages</h2>
+                    </div>
+                    <div class="summary-grid">
+                        <article class="summary-card">
+                            <span class="summary-label">Total events</span>
+                            <strong id="summary-total">0</strong>
+                        </article>
+                        <article class="summary-card">
+                            <span class="summary-label">Allowed</span>
+                            <strong id="summary-allowed">0</strong>
+                        </article>
+                        <article class="summary-card">
+                            <span class="summary-label">Blocked</span>
+                            <strong id="summary-blocked">0</strong>
+                        </article>
+                        <article class="summary-card">
+                            <span class="summary-label">Anchored receipts</span>
+                            <strong id="summary-anchored">0</strong>
+                        </article>
+                    </div>
+                    <div id="activity-alerts" class="alerts"></div>
+                </section>
+            </section>
+
+            <section class="panel">
+                <div class="section-heading">
+                    <p class="eyebrow">Feed</p>
+                    <h2>Audit activity</h2>
+                </div>
+                <div id="activity-empty" class="empty-state">
+                    Load a policy to view transaction receipts, proof issuance, blocked requests, and verification outcomes.
+                </div>
+                <div id="activity-list" class="activity-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="/activity.js"></script>
+</body>
+</html>
