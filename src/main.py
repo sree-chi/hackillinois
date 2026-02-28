@@ -61,6 +61,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["x-mock-payment-token"],
 )
 
 
@@ -175,12 +176,17 @@ def authorize(
 
         if not verified:
             logger.warning("x402 verification failed for high-risk action.")
+            error_detail = "High-risk actions require a verified payment token via x-solana-tx-signature."
+            headers = {}
+            if receipt_service.mode == "mock":
+                mock_token = receipt_service.build_mock_payment_token(verification_payload)
+                error_detail += f" Use this demo token: {mock_token}"
+                headers["x-mock-payment-token"] = mock_token
+
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=(
-                    "High-risk actions require a verified payment token via x-solana-tx-signature. "
-                    "In mock mode, use the deterministic demo token returned by the frontend."
-                ),
+                detail=error_detail,
+                headers=headers
             )
 
         logger.info(f"x402 verified for signature: {x_solana_tx_signature[:15]}...")

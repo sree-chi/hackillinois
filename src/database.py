@@ -6,6 +6,8 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:postgrespassword@localhost:5432/sentinel"
 )
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Connect args specific to different dialects could be added here
 engine = create_engine(DATABASE_URL)
