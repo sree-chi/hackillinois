@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
+from sqlakchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from src.db_models import (
@@ -19,8 +21,24 @@ from src.models import (
     CreatePolicyRequest,
     IssueApiKeyRequest,
     Policy,
+    PolicyVersionSummary,
+    UpdatePolicyRequest,
     canonical_hash,
+    new_id,
 )
+
+def _policy_from_row(row: PolicyModel) -> Policy: 
+    return Policy.model_validate({
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
+        "policy_hash": row.policy_hash,
+        "rules": row.rules,
+        "version": row.version,
+        "root_policy_id": row.root_policy_id,
+        "superseded_by": row.superseded_by,
+        "created_at": row.created_at,
+    })
 
 
 class DatabaseStore:
@@ -57,52 +75,141 @@ class DatabaseStore:
         return client
 
     def get_api_client_by_hash(self, api_key_hash: str) -> ApiClientRecord | None:
-        db_client = self.db.query(ApiClientModel).filter(ApiClientModel.api_key_hash == api_key_hash).first()
-        if not db_client:
-            return None
-
-        return ApiClientRecord.model_validate(db_client)
+        row = (
+            self.db.query(ApiClientModel)
+            .filter(ApiClientModel.api_key_hash == api_key_hash)
+            .first()
+        )
+        return ApiClientRecord.model_validate(row) if row else None
+    
+    def get_api_client_by_id(self, client_id: str) -> ApiClientRecord | None:
+        row = (
+            self.db.query(ApiClientModel)
+            .filter(ApiClientModel.client_id == client_id)
+            .first()
+        )
+        return ApiClientRecord.model_validate(row) if row else None
 
     def mark_api_client_used(self, client_id: str) -> None:
-        db_client = self.db.query(ApiClientModel).filter(ApiClientModel.client_id == client_id).first()
-        if not db_client:
-            return
+        row = (
+            self.db.query(ApiClientModel)
+            .filter(ApiClientModel.client_id == client_id)
+            .first()
+        )
+        if row:
+            row.last_used_at = datetime.now(timezone.utc)
+            self.db.commit()
 
-        db_client.last_used_at = datetime.now(timezone.utc)
+    def rotate_api_client_key(self, 
+                              client_id: str, 
+                              new_api_key_hash: str,
+                              new_api_key_prefix: str) -> ApiClientRecord | None:
+        row = (
+            self.db.query(ApiClientModel)
+            .filter(ApiClientModel.client_id == client_id)
+            .first()
+        )
+
+        if not row or row.revoked_at is not None:
+            return None
+        row.api_key_hash = new_api_key_hash
+        row.api_key_prefix = new_api_key_prefix
+        row.last_used_at = None
         self.db.commit()
+        self.db.refresh(row)
+        return ApiClientRecord.model_validate(row)
+    
+    def revoke_api_client(self, client_id: str) -> ApiClientRecord | None:
+        row = (
+            self.db.query(ApiClientModel)
+            .filter(ApiClientModel.client_id == client_id)
+            .first()
+
+        )
+        if not row:
+            return None
+        row.revoked_at = datetime.now(timezone.utc)
+        self.db.commit()
+        self.db.refresh(row)
+        return ApiClientRecord.model_validate(row)
+
 
     def create_policy(self, payload: CreatePolicyRequest, idempotency_key: str | None) -> Policy:
         if idempotency_key:
-            existing = self.db.query(PolicyModel).filter(PolicyModel.idempotency_key == idempotency_key).first()
+            existing = (
+                self.db.query(PolicyModel)
+                .filter(PolicyModel.idempotency_key == idempotency_key)
+                .first()
+            )
             if existing:
-                return Policy.model_validate({
-                    "id": existing.id,
-                    "name": existing.name,
-                    "description": existing.description,
-                    "policy_hash": existing.policy_hash,
-                    "rules": existing.rules,
-                    "created_at": existing.created_at
-                })
+                return _policy_from_row(existing)
 
         payload_data = payload.model_dump()
         policy_hash = canonical_hash(payload_data)
-        policy_data = Policy(**payload_data, policy_hash=policy_hash)
-
+        policy_id = new_id("pol")
+        policy = Policy(
+            id=policy_id,
+            **payload_data,
+            policy_hash=policy_hash,
+            version=1,
+            root_policy_id=policy_id,   # first version: root == self
+        )
         db_policy = PolicyModel(
-            id=policy_data.id,
-            name=policy_data.name,
-            description=policy_data.description,
-            policy_hash=policy_data.policy_hash,
-            rules=policy_data.rules.model_dump(),
-            created_at=policy_data.created_at,
-            idempotency_key=idempotency_key
+            id=policy.id,
+            name=policy.name,
+            description=policy.description,
+            policy_hash=policy.policy_hash,
+            rules=policy.rules.model_dump(),
+            version=policy.version,
+            root_policy_id=policy.root_policy_id,
+            superseded_by=None,
+            created_at=policy.created_at,
+            idempotency_key=idempotency_key,
         )
         self.db.add(db_policy)
         self.db.commit()
         self.db.refresh(db_policy)
+        return policy
+    
 
-        return policy_data
+    def update_policy(self, policy_id: str, payload: UpdatePolicyRequest) -> Policy | None:
+        
+        old_row = (
+            self.db.query(PolicyModel)
+            .filter(PolicyModel.id == policy_id)
+            .first()
+        )
+        if not old_row or old_row.superseded_by is not None:
+            return None
 
+        # Merge: use existing values for any field not supplied in the request
+        new_name = payload.name if payload.name is not None else old_row.name
+        new_description = payload.description if payload.description is not None else old_row.description
+        new_rules = payload.rules.model_dump() if payload.rules is not None else old_row.rules
+
+        new_version = old_row.version + 1
+        new_id_val = new_id("pol")
+        new_hash = canonical_hash({"name": new_name, "description": new_description, "rules": new_rules})
+
+        new_row = PolicyModel(
+            id=new_id_val,
+            name=new_name,
+            description=new_description,
+            policy_hash=new_hash,
+            rules=new_rules,
+            version=new_version,
+            root_policy_id=old_row.root_policy_id,
+            superseded_by=None,
+            idempotency_key=None,
+        )
+        self.db.add(new_row)
+
+        # Stamp the old version as superseded
+        old_row.superseded_by = new_id_val
+        self.db.commit()
+        self.db.refresh(new_row)
+        return _policy_from_row(new_row)
+    
     def get_policy(self, policy_id: str) -> Policy | None:
         db_policy = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
         if not db_policy:

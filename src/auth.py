@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import secrets
 
@@ -36,6 +37,9 @@ def extract_api_key(authorization_header: str | None, x_api_key: str | None) -> 
         return x_api_key.strip()
     return None
 
+def _is_admin_key(candidate: str) -> bool:
+    return hmac.compare_digest(candidate.encode("utf-8"), ADMIN_API_KEY.encode("utf-8"))
+
 
 async def verify_api_key(
     authorization_header: str | None = Security(api_key_header),
@@ -62,3 +66,15 @@ async def verify_api_key(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or missing API Key",
     )
+
+async def verify_admin_key(
+        authorization_header: str | None = Security(api_key_header), 
+        x_api_key: str | None = Security(x_api_key_header), 
+) -> str:
+    candidate = extract_api_key(authorization_header, x_api_key)
+    if not candidate or not _is_admin_key(candidate):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint requires admin credentials",
+        )
+    return candidate

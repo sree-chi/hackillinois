@@ -55,6 +55,11 @@ class CreatePolicyRequest(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     rules: PolicyRule
 
+class UpdatePolicyRequest(BaseModel):
+    name: str | None = Field(min_length=1, max_length=100)
+    description : str | None = Field(default=None, max_length=500)
+    rules: PolicyRule | None = None
+
 
 class IssueApiKeyRequest(BaseModel):
     app_name: str = Field(min_length=1, max_length=100)
