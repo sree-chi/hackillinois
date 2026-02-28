@@ -78,6 +78,19 @@ class LoginAccountRequest(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class WalletLinkChallengeRequest(BaseModel):
+    wallet_address: str = Field(min_length=32, max_length=80)
+    provider: str = Field(default="phantom", min_length=2, max_length=30)
+
+
+class WalletLinkRequest(BaseModel):
+    wallet_address: str = Field(min_length=32, max_length=80)
+    provider: str = Field(default="phantom", min_length=2, max_length=30)
+    nonce: str = Field(min_length=8, max_length=120)
+    signed_message: str = Field(min_length=20, max_length=4000)
+    signature: str = Field(min_length=20, max_length=4000)
+
+
 class Policy(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -246,6 +259,59 @@ class AccountRecord(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class LinkedWalletRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    wallet_id: str = Field(default_factory=lambda: new_id("wal"))
+    account_id: str
+    wallet_address: str
+    provider: str = "phantom"
+    connected_at: datetime = Field(default_factory=utc_now)
+
+
+class WalletLinkChallengeRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    challenge_id: str = Field(default_factory=lambda: new_id("wch"))
+    account_id: str
+    wallet_address: str
+    provider: str = "phantom"
+    nonce: str
+    message: str
+    created_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime
+    used_at: datetime | None = None
+
+
+class WalletLinkChallengeResponse(BaseModel):
+    wallet_address: str
+    provider: str
+    nonce: str
+    message: str
+    expires_at: datetime
+
+
+class WalletTransactionSummary(BaseModel):
+    signature: str
+    slot: int | None = None
+    block_time: datetime | None = None
+    confirmation_status: str | None = None
+    success: bool = True
+    memo: str | None = None
+    native_change_lamports: int | None = None
+    explorer_url: str | None = None
+
+
+class WalletOverviewResponse(BaseModel):
+    wallet: LinkedWalletRecord
+    rpc_url: str
+    network: str
+    balance_lamports: int
+    balance_sol: float
+    fetched_at: datetime = Field(default_factory=utc_now)
+    transactions: list[WalletTransactionSummary] = Field(default_factory=list)
+
+
 class AccountSessionRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -275,3 +341,4 @@ class AccountApiKeySummary(BaseModel):
 class AccountDashboardResponse(BaseModel):
     account: AccountRecord
     api_keys: list[AccountApiKeySummary]
+    linked_wallets: list[LinkedWalletRecord] = Field(default_factory=list)

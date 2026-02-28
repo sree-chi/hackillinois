@@ -34,6 +34,7 @@ from src.models import (
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
+    LinkedWalletRecord,
     LoginAccountRequest,
     PublicApiOverview,
     CreatePolicyRequest,
@@ -46,6 +47,10 @@ from src.models import (
     VerifyProofRequest,
     VerifyProofResult,
     UpdatePolicyRequest,
+    WalletLinkChallengeRequest,
+    WalletLinkChallengeResponse,
+    WalletLinkRequest,
+    WalletOverviewResponse,
     expires_at,
     new_id,
 )
@@ -153,6 +158,13 @@ def resolve_public_base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
+def request_domain(request: Request) -> str:
+    origin = request.headers.get("origin")
+    if origin:
+        return origin.rstrip("/")
+    return resolve_public_base_url(request)
+
+
 def error_response(
     status_code: int,
     code: str,
@@ -257,7 +269,178 @@ def account_dashboard(
     return AccountDashboardResponse(
         account=account,
         api_keys=store.list_api_clients_for_account(account.account_id),
+        linked_wallets=store.list_wallets_for_account(account.account_id),
     )
+
+
+@app.post(
+    "/v1/accounts/me/solana/challenge",
+    response_model=WalletLinkChallengeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_wallet_link_challenge(
+    payload: WalletLinkChallengeRequest,
+    request: Request,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    try:
+        wallet_address = receipt_service.validate_wallet_address(payload.wallet_address)
+    except SolanaVerificationError as exc:
+        raise error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_WALLET_ADDRESS",
+            message=str(exc),
+        ) from exc
+
+    nonce = receipt_service.new_wallet_link_nonce()
+    message = receipt_service.build_wallet_link_message(
+        domain=request_domain(request),
+        wallet_address=wallet_address,
+        account_email=account.email,
+        nonce=nonce,
+    )
+    challenge = store.create_wallet_link_challenge(
+        account_id=account.account_id,
+        wallet_address=wallet_address,
+        provider=payload.provider.lower(),
+        nonce=nonce,
+        message=message,
+        ttl_seconds=receipt_service.wallet_link_ttl_seconds,
+    )
+    return WalletLinkChallengeResponse(
+        wallet_address=challenge.wallet_address,
+        provider=challenge.provider,
+        nonce=challenge.nonce,
+        message=challenge.message,
+        expires_at=challenge.expires_at,
+    )
+
+
+@app.post("/v1/accounts/me/solana/link", response_model=LinkedWalletRecord, status_code=status.HTTP_201_CREATED)
+def link_solana_wallet(
+    payload: WalletLinkRequest,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    try:
+        wallet_address = receipt_service.validate_wallet_address(payload.wallet_address)
+    except SolanaVerificationError as exc:
+        raise error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_WALLET_ADDRESS",
+            message=str(exc),
+        ) from exc
+
+    challenge = store.get_wallet_link_challenge(account.account_id, wallet_address, payload.nonce)
+    if not challenge or challenge.provider != payload.provider.lower():
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="WALLET_CHALLENGE_NOT_FOUND",
+            message="Wallet link challenge was not found.",
+        )
+    if challenge.used_at is not None:
+        raise error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="WALLET_CHALLENGE_USED",
+            message="Wallet link challenge has already been used.",
+        )
+    challenge_expires_at = challenge.expires_at
+    if challenge_expires_at.tzinfo is None:
+        challenge_expires_at = challenge_expires_at.replace(tzinfo=timezone.utc)
+    if challenge_expires_at <= datetime.now(timezone.utc):
+        raise error_response(
+            status_code=status.HTTP_410_GONE,
+            code="WALLET_CHALLENGE_EXPIRED",
+            message="Wallet link challenge has expired.",
+        )
+    if payload.signed_message != challenge.message:
+        raise error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="WALLET_MESSAGE_MISMATCH",
+            message="Signed wallet message does not match the challenge.",
+        )
+    if not receipt_service.verify_wallet_link_signature(wallet_address, payload.signed_message, payload.signature):
+        raise error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="INVALID_WALLET_SIGNATURE",
+            message="Wallet signature verification failed.",
+        )
+
+    existing_wallet = store.get_account_wallet_by_address(wallet_address)
+    if existing_wallet and existing_wallet.account_id != account.account_id:
+        raise error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="WALLET_ALREADY_LINKED",
+            message="This wallet is already linked to another account.",
+        )
+
+    store.mark_wallet_link_challenge_used(challenge.challenge_id)
+    try:
+        return store.link_account_wallet(
+            account_id=account.account_id,
+            wallet_address=wallet_address,
+            provider=payload.provider.lower(),
+        )
+    except ValueError as exc:
+        raise error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="WALLET_ALREADY_LINKED",
+            message=str(exc),
+        ) from exc
+
+
+@app.get("/v1/accounts/me/solana/wallets", response_model=list[LinkedWalletRecord])
+def list_linked_wallets(
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return store.list_wallets_for_account(account.account_id)
+
+
+@app.get("/v1/accounts/me/solana/wallets/{wallet_address}", response_model=WalletOverviewResponse)
+def get_linked_wallet_overview(
+    wallet_address: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    wallet = store.get_wallet_for_account(account.account_id, wallet_address)
+    if not wallet:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="WALLET_NOT_FOUND",
+            message="Wallet is not linked to this account.",
+        )
+    try:
+        overview = receipt_service.get_wallet_overview(wallet.wallet_address)
+    except SolanaVerificationError as exc:
+        raise error_response(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            code="SOLANA_RPC_UNAVAILABLE",
+            message=str(exc),
+        ) from exc
+    return WalletOverviewResponse(wallet=wallet, **overview)
+
+
+@app.delete("/v1/accounts/me/solana/wallets/{wallet_address}", status_code=status.HTTP_200_OK)
+def unlink_solana_wallet(
+    wallet_address: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    deleted = store.unlink_wallet_for_account(account.account_id, wallet_address)
+    if not deleted:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="WALLET_NOT_FOUND",
+            message="Wallet is not linked to this account.",
+        )
+    return {"status": "success", "wallet_address": wallet_address}
 
 
 @app.post("/v1/developer/keys", response_model=IssueApiKeyResponse, status_code=status.HTTP_201_CREATED)

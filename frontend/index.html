@@ -159,6 +159,58 @@
                 <section class="grid">
                     <section class="panel">
                         <div class="section-heading">
+                            <p class="eyebrow">Solana</p>
+                            <h2>Linked wallets</h2>
+                        </div>
+                        <p class="muted">Connect Phantom to link a real Solana wallet to this account. The dashboard will load its balance and recent transaction record.</p>
+                        <div class="action-row">
+                            <button id="connect-wallet-button" class="btn btn-secondary" type="button" disabled>Connect Phantom</button>
+                            <button id="refresh-wallet-button" class="btn btn-ghost" type="button" disabled>Refresh wallet</button>
+                        </div>
+                        <div id="wallet-status" class="muted">No wallet linked yet.</div>
+                        <div id="wallet-list" class="dashboard-list">
+                            <div class="empty-state">No wallets linked to this account.</div>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Wallet View</p>
+                            <h2>On-chain overview</h2>
+                        </div>
+                        <div class="summary-grid">
+                            <div class="summary-card">
+                                <span class="summary-label">Wallet</span>
+                                <code id="wallet-address-label">No wallet selected.</code>
+                            </div>
+                            <div class="summary-card">
+                                <span class="summary-label">Balance</span>
+                                <strong id="wallet-balance-label">0 SOL</strong>
+                            </div>
+                            <div class="summary-card">
+                                <span class="summary-label">Network</span>
+                                <strong id="wallet-network-label">Not loaded</strong>
+                            </div>
+                            <div class="summary-card">
+                                <span class="summary-label">Last sync</span>
+                                <strong id="wallet-last-sync">Not synced</strong>
+                            </div>
+                        </div>
+                        <div class="output-card">
+                            <div class="output-header">
+                                <h3>Recent transactions</h3>
+                                <button id="unlink-wallet-button" class="btn btn-ghost" type="button" disabled>Unlink selected wallet</button>
+                            </div>
+                            <div id="wallet-transaction-list" class="dashboard-list">
+                                <div class="empty-state">Link a wallet to load recent transactions.</div>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+
+                <section class="grid">
+                    <section class="panel">
+                        <div class="section-heading">
                             <p class="eyebrow">Step 4</p>
                             <h2>Quickstart</h2>
                         </div>

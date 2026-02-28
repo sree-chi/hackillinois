@@ -8,6 +8,8 @@ from src.db_models import (
     AccountApiClientModel,
     AccountModel,
     AccountSessionModel,
+    AccountWalletLinkChallengeModel,
+    AccountWalletModel,
     ApiClientModel,
     AuditRecordModel,
     AuditStatusEnum,
@@ -24,8 +26,11 @@ from src.models import (
     AuthorizationProof,
     CreatePolicyRequest,
     IssueApiKeyRequest,
+    LinkedWalletRecord,
     Policy,
+    WalletLinkChallengeRecord,
     canonical_hash,
+    expires_at,
     new_id,
 )
 
@@ -71,6 +76,133 @@ class DatabaseStore:
 
     def get_account_session_by_hash(self, token_hash: str) -> AccountSessionModel | None:
         return self.db.query(AccountSessionModel).filter(AccountSessionModel.token_hash == token_hash).first()
+
+    def create_wallet_link_challenge(
+        self,
+        account_id: str,
+        wallet_address: str,
+        provider: str,
+        nonce: str,
+        message: str,
+        ttl_seconds: int,
+    ) -> WalletLinkChallengeRecord:
+        challenge = WalletLinkChallengeRecord(
+            account_id=account_id,
+            wallet_address=wallet_address,
+            provider=provider,
+            nonce=nonce,
+            message=message,
+            expires_at=expires_at(ttl_seconds),
+        )
+        row = AccountWalletLinkChallengeModel(
+            challenge_id=challenge.challenge_id,
+            account_id=challenge.account_id,
+            wallet_address=challenge.wallet_address,
+            provider=challenge.provider,
+            nonce=challenge.nonce,
+            message=challenge.message,
+            created_at=challenge.created_at,
+            expires_at=challenge.expires_at,
+            used_at=challenge.used_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return WalletLinkChallengeRecord.model_validate(row)
+
+    def get_wallet_link_challenge(self, account_id: str, wallet_address: str, nonce: str) -> WalletLinkChallengeRecord | None:
+        row = (
+            self.db.query(AccountWalletLinkChallengeModel)
+            .filter(
+                AccountWalletLinkChallengeModel.account_id == account_id,
+                AccountWalletLinkChallengeModel.wallet_address == wallet_address,
+                AccountWalletLinkChallengeModel.nonce == nonce,
+            )
+            .first()
+        )
+        return WalletLinkChallengeRecord.model_validate(row) if row else None
+
+    def mark_wallet_link_challenge_used(self, challenge_id: str) -> None:
+        row = (
+            self.db.query(AccountWalletLinkChallengeModel)
+            .filter(AccountWalletLinkChallengeModel.challenge_id == challenge_id)
+            .first()
+        )
+        if not row:
+            return
+        row.used_at = datetime.now(timezone.utc)
+        self.db.commit()
+
+    def get_account_wallet_by_address(self, wallet_address: str) -> LinkedWalletRecord | None:
+        row = (
+            self.db.query(AccountWalletModel)
+            .filter(AccountWalletModel.wallet_address == wallet_address)
+            .first()
+        )
+        return LinkedWalletRecord.model_validate(row) if row else None
+
+    def link_account_wallet(self, account_id: str, wallet_address: str, provider: str) -> LinkedWalletRecord:
+        row = (
+            self.db.query(AccountWalletModel)
+            .filter(AccountWalletModel.wallet_address == wallet_address)
+            .first()
+        )
+        if row:
+            if row.account_id != account_id:
+                raise ValueError("Wallet already linked to another account.")
+            return LinkedWalletRecord.model_validate(row)
+
+        wallet = LinkedWalletRecord(
+            account_id=account_id,
+            wallet_address=wallet_address,
+            provider=provider,
+        )
+        row = AccountWalletModel(
+            wallet_id=wallet.wallet_id,
+            account_id=wallet.account_id,
+            wallet_address=wallet.wallet_address,
+            provider=wallet.provider,
+            connected_at=wallet.connected_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return LinkedWalletRecord.model_validate(row)
+
+    def list_wallets_for_account(self, account_id: str) -> list[LinkedWalletRecord]:
+        rows = (
+            self.db.query(AccountWalletModel)
+            .filter(AccountWalletModel.account_id == account_id)
+            .order_by(AccountWalletModel.connected_at.desc())
+            .all()
+        )
+        return [LinkedWalletRecord.model_validate(row) for row in rows]
+
+    def get_wallet_for_account(self, account_id: str, wallet_address: str) -> LinkedWalletRecord | None:
+        row = (
+            self.db.query(AccountWalletModel)
+            .filter(
+                AccountWalletModel.account_id == account_id,
+                AccountWalletModel.wallet_address == wallet_address,
+            )
+            .first()
+        )
+        return LinkedWalletRecord.model_validate(row) if row else None
+
+    def unlink_wallet_for_account(self, account_id: str, wallet_address: str) -> bool:
+        row = (
+            self.db.query(AccountWalletModel)
+            .filter(
+                AccountWalletModel.account_id == account_id,
+                AccountWalletModel.wallet_address == wallet_address,
+            )
+            .first()
+        )
+        if not row:
+            return False
+        self.db.delete(row)
+        self.db.commit()
+        return True
 
     def create_api_client(
         self,

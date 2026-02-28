@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import secrets
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ class SolanaReceiptService:
         self.mode = os.getenv("SOLANA_RECEIPT_MODE", "mock").lower()
         self.rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
         self.client = Client(self.rpc_url)
+        self.wallet_link_ttl_seconds = int(os.getenv("SOLANA_WALLET_LINK_TTL_SECONDS", "600"))
         self.mock_signing_secret = os.getenv("SOLANA_PROOF_SECRET", "sentinel-proof-secret")
         self.mock_issuer = os.getenv("SOLANA_PROOF_ISSUER", "sentinel-mock-issuer")
         self.required_commitment = os.getenv("SOLANA_REQUIRED_COMMITMENT", "confirmed").lower()
@@ -60,6 +62,52 @@ class SolanaReceiptService:
         if self.keypair:
             return str(self.keypair.pubkey())
         return self.mock_issuer
+
+    def wallet_network(self) -> str:
+        lower = self.rpc_url.lower()
+        if "mainnet" in lower:
+            return "mainnet-beta"
+        if "testnet" in lower:
+            return "testnet"
+        return "devnet"
+
+    def explorer_url_for_signature(self, signature: str) -> str:
+        network = self.wallet_network()
+        suffix = "" if network == "mainnet-beta" else f"?cluster={network}"
+        return f"https://explorer.solana.com/tx/{signature}{suffix}"
+
+    def validate_wallet_address(self, wallet_address: str) -> str:
+        try:
+            return str(Pubkey.from_string(wallet_address))
+        except Exception as exc:
+            raise SolanaVerificationError("Invalid Solana wallet address.") from exc
+
+    def new_wallet_link_nonce(self) -> str:
+        return secrets.token_urlsafe(24)
+
+    def build_wallet_link_message(self, domain: str, wallet_address: str, account_email: str, nonce: str) -> str:
+        normalized_wallet = self.validate_wallet_address(wallet_address)
+        return "\n".join([
+            f"{domain} wants you to link your Solana wallet.",
+            "",
+            "Sign this message with Phantom to connect your wallet to your Sentinel account.",
+            f"Wallet: {normalized_wallet}",
+            f"Account: {account_email}",
+            f"Nonce: {nonce}",
+            f"RPC: {self.rpc_url}",
+        ])
+
+    def verify_wallet_link_signature(self, wallet_address: str, message: str, signature: str) -> bool:
+        try:
+            pubkey = Pubkey.from_string(wallet_address)
+            signature_bytes = base64.b64decode(signature, validate=True)
+            signed = Signature.from_bytes(signature_bytes)
+        except Exception:
+            return False
+        try:
+            return bool(signed.verify(pubkey, message.encode("utf-8")))
+        except Exception:
+            return False
 
     def _intent_hash(self, payload: dict[str, Any]) -> str:
         normalized = self._normalize_payload(payload)
@@ -149,6 +197,82 @@ class SolanaReceiptService:
             ],
         )
         return response.get("result")
+
+    def _get_balance(self, wallet_address: str) -> int:
+        response = self._rpc_json(
+            "getBalance",
+            [
+                wallet_address,
+                {"commitment": self.required_commitment},
+            ],
+        )
+        value = response.get("result", {}).get("value")
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise SolanaVerificationError("Unable to read wallet balance from Solana RPC.")
+
+    def _get_signatures_for_address(self, wallet_address: str, limit: int) -> list[dict[str, Any]]:
+        response = self._rpc_json(
+            "getSignaturesForAddress",
+            [
+                wallet_address,
+                {"limit": limit},
+            ],
+        )
+        result = response.get("result", [])
+        return result if isinstance(result, list) else []
+
+    def _wallet_native_change_lamports(self, tx: dict[str, Any], wallet_address: str) -> int | None:
+        try:
+            message = tx.get("transaction", {}).get("message", {})
+            account_keys = message.get("accountKeys", [])
+            addresses = []
+            for entry in account_keys:
+                if isinstance(entry, dict):
+                    addresses.append(entry.get("pubkey"))
+                else:
+                    addresses.append(entry)
+            index = addresses.index(wallet_address)
+            meta = tx.get("meta", {})
+            pre_balances = meta.get("preBalances", [])
+            post_balances = meta.get("postBalances", [])
+            return int(post_balances[index]) - int(pre_balances[index])
+        except Exception:
+            return None
+
+    def get_wallet_overview(self, wallet_address: str, limit: int = 8) -> dict[str, Any]:
+        normalized_wallet = self.validate_wallet_address(wallet_address)
+        balance_lamports = self._get_balance(normalized_wallet)
+        signatures = self._get_signatures_for_address(normalized_wallet, limit)
+        transactions: list[dict[str, Any]] = []
+
+        for entry in signatures:
+            signature = entry.get("signature")
+            if not signature:
+                continue
+            tx = self._get_transaction(signature)
+            native_change_lamports = self._wallet_native_change_lamports(tx or {}, normalized_wallet) if tx else None
+            block_time = entry.get("blockTime")
+            transactions.append({
+                "signature": signature,
+                "slot": entry.get("slot"),
+                "block_time": datetime.fromtimestamp(block_time, tz=timezone.utc) if block_time else None,
+                "confirmation_status": entry.get("confirmationStatus"),
+                "success": entry.get("err") is None,
+                "memo": entry.get("memo"),
+                "native_change_lamports": native_change_lamports,
+                "explorer_url": self.explorer_url_for_signature(signature),
+            })
+
+        return {
+            "rpc_url": self.rpc_url,
+            "network": self.wallet_network(),
+            "balance_lamports": balance_lamports,
+            "balance_sol": balance_lamports / 1_000_000_000,
+            "transactions": transactions,
+            "fetched_at": datetime.now(timezone.utc),
+        }
 
     def _iter_transaction_instructions(self, tx: dict[str, Any]) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []

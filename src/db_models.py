@@ -120,6 +120,38 @@ class AccountSessionModel(Base):
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class AccountWalletModel(Base):
+    __tablename__ = "account_wallets"
+
+    wallet_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    wallet_address = Column(String(80), nullable=False, unique=True, index=True)
+    provider = Column(String(30), nullable=False, default="phantom", server_default="phantom")
+    connected_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_account_wallets_account_connected", "account_id", "connected_at"),
+    )
+
+
+class AccountWalletLinkChallengeModel(Base):
+    __tablename__ = "account_wallet_link_challenges"
+
+    challenge_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    wallet_address = Column(String(80), nullable=False, index=True)
+    provider = Column(String(30), nullable=False, default="phantom", server_default="phantom")
+    nonce = Column(String(120), nullable=False, unique=True, index=True)
+    message = Column(String(4000), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_wallet_challenges_account_wallet", "account_id", "wallet_address"),
+    )
+
+
 class AccountApiClientModel(Base):
     __tablename__ = "account_api_clients"
 

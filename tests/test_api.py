@@ -1,7 +1,9 @@
 import os
+import base64
 
 import pytest
 from fastapi.testclient import TestClient
+from solders.keypair import Keypair
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -130,6 +132,82 @@ def test_account_dashboard_lists_issued_keys():
     body = response.json()
     assert body["account"]["email"] == "owner@example.com"
     assert body["api_keys"][0]["app_name"] == "Public Portal App"
+    assert body["linked_wallets"] == []
+
+
+def test_can_link_wallet_to_account_and_fetch_overview():
+    session_token = create_account_session()
+    keypair = Keypair()
+    wallet_address = str(keypair.pubkey())
+
+    challenge = client.post(
+        "/v1/accounts/me/solana/challenge",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "wallet_address": wallet_address,
+            "provider": "phantom",
+        },
+    )
+    assert challenge.status_code == 201
+    challenge_body = challenge.json()
+    assert challenge_body["wallet_address"] == wallet_address
+
+    signature = keypair.sign_message(challenge_body["message"].encode("utf-8"))
+    encoded_signature = base64.b64encode(bytes(signature)).decode("ascii")
+
+    linked = client.post(
+        "/v1/accounts/me/solana/link",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "wallet_address": wallet_address,
+            "provider": "phantom",
+            "nonce": challenge_body["nonce"],
+            "signed_message": challenge_body["message"],
+            "signature": encoded_signature,
+        },
+    )
+    assert linked.status_code == 201
+    assert linked.json()["wallet_address"] == wallet_address
+
+    original_get_wallet_overview = receipt_service.get_wallet_overview
+    receipt_service.get_wallet_overview = lambda address, limit=8: {
+        "rpc_url": "https://api.devnet.solana.com",
+        "network": "devnet",
+        "balance_lamports": 2_500_000_000,
+        "balance_sol": 2.5,
+        "transactions": [
+            {
+                "signature": "txsig123",
+                "slot": 12345,
+                "block_time": "2026-02-28T18:00:00Z",
+                "confirmation_status": "confirmed",
+                "success": True,
+                "memo": "wallet linked",
+                "native_change_lamports": 5000,
+                "explorer_url": "https://explorer.solana.com/tx/txsig123?cluster=devnet",
+            }
+        ],
+        "fetched_at": "2026-02-28T18:05:00Z",
+    }
+    try:
+        dashboard = client.get(
+            "/v1/accounts/me/dashboard",
+            headers={"Authorization": f"Bearer {session_token}"},
+        )
+        assert dashboard.status_code == 200
+        assert dashboard.json()["linked_wallets"][0]["wallet_address"] == wallet_address
+
+        overview = client.get(
+            f"/v1/accounts/me/solana/wallets/{wallet_address}",
+            headers={"Authorization": f"Bearer {session_token}"},
+        )
+        assert overview.status_code == 200
+        body = overview.json()
+        assert body["wallet"]["wallet_address"] == wallet_address
+        assert body["balance_sol"] == 2.5
+        assert body["transactions"][0]["signature"] == "txsig123"
+    finally:
+        receipt_service.get_wallet_overview = original_get_wallet_overview
 
 
 def test_issued_public_key_can_access_protected_endpoints():

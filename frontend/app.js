@@ -10,6 +10,8 @@ let currentApiKey = localStorage.getItem(STORAGE_KEYS.apiKey) || "";
 let currentPolicyId = localStorage.getItem(STORAGE_KEYS.policyId) || "";
 let currentSessionToken = localStorage.getItem(STORAGE_KEYS.sessionToken) || "";
 let currentAccount = null;
+let currentLinkedWallets = [];
+let selectedWalletAddress = "";
 
 const docsLink = document.getElementById("docs-link");
 const apiBaseLabel = document.getElementById("api-base-label");
@@ -35,6 +37,16 @@ const consoleEl = document.getElementById("console-output");
 const accountSummary = document.getElementById("account-summary");
 const sessionMeta = document.getElementById("session-meta");
 const apiKeyList = document.getElementById("api-key-list");
+const connectWalletButton = document.getElementById("connect-wallet-button");
+const refreshWalletButton = document.getElementById("refresh-wallet-button");
+const unlinkWalletButton = document.getElementById("unlink-wallet-button");
+const walletStatus = document.getElementById("wallet-status");
+const walletList = document.getElementById("wallet-list");
+const walletAddressLabel = document.getElementById("wallet-address-label");
+const walletBalanceLabel = document.getElementById("wallet-balance-label");
+const walletNetworkLabel = document.getElementById("wallet-network-label");
+const walletLastSync = document.getElementById("wallet-last-sync");
+const walletTransactionList = document.getElementById("wallet-transaction-list");
 
 function resolveApiBase() {
     const { hostname, origin } = window.location;
@@ -90,6 +102,82 @@ function apiHeaders() {
         Authorization: `Bearer ${currentApiKey}`,
         "Content-Type": "application/json",
     };
+}
+
+function formatDate(value) {
+    if (!value) {
+        return "Not available";
+    }
+    return new Date(value).toLocaleString();
+}
+
+function bytesToBase64(bytes) {
+    const chars = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+    return window.btoa(chars);
+}
+
+function resetWalletOverview(message = "Link a wallet to load recent transactions.") {
+    walletAddressLabel.textContent = "No wallet selected.";
+    walletBalanceLabel.textContent = "0 SOL";
+    walletNetworkLabel.textContent = "Not loaded";
+    walletLastSync.textContent = "Not synced";
+    walletTransactionList.innerHTML = `<div class="empty-state">${message}</div>`;
+}
+
+function renderLinkedWallets(wallets) {
+    currentLinkedWallets = wallets;
+    if (!wallets.length) {
+        walletList.innerHTML = '<div class="empty-state">No wallets linked to this account.</div>';
+        walletStatus.textContent = "No wallet linked yet.";
+        return;
+    }
+
+    walletStatus.textContent = `${wallets.length} wallet${wallets.length === 1 ? "" : "s"} linked to this account.`;
+    walletList.innerHTML = wallets.map((wallet) => `
+        <article class="activity-card ${wallet.wallet_address === selectedWalletAddress ? "activity-success" : ""}">
+            <div class="activity-header">
+                <div>
+                    <p class="activity-title">${wallet.provider} <span>${wallet.wallet_address}</span></p>
+                    <p class="activity-meta">Linked ${formatDate(wallet.connected_at)}</p>
+                </div>
+                <button class="btn btn-ghost" type="button" data-wallet-select="${wallet.wallet_address}">View wallet</button>
+            </div>
+        </article>
+    `).join("");
+}
+
+function renderWalletOverview(overview) {
+    const { wallet, network, balance_sol: balanceSol, fetched_at: fetchedAt, transactions } = overview;
+    walletAddressLabel.textContent = wallet.wallet_address;
+    walletBalanceLabel.textContent = `${Number(balanceSol).toFixed(4)} SOL`;
+    walletNetworkLabel.textContent = network;
+    walletLastSync.textContent = formatDate(fetchedAt);
+
+    if (!transactions.length) {
+        walletTransactionList.innerHTML = '<div class="empty-state">No recent transactions found for this wallet.</div>';
+        return;
+    }
+
+    walletTransactionList.innerHTML = transactions.map((entry) => `
+        <article class="activity-card ${entry.success ? "activity-success" : "activity-danger"}">
+            <div class="activity-header">
+                <div>
+                    <p class="activity-title">${entry.success ? "Confirmed" : "Failed"} <span>${entry.signature}</span></p>
+                    <p class="activity-meta">${formatDate(entry.block_time)} | Slot ${entry.slot ?? "unknown"} | ${entry.confirmation_status || "unknown"}</p>
+                </div>
+                <span class="status-pill ${entry.success ? "status-success" : "status-danger"}">
+                    ${entry.native_change_lamports == null ? "n/a" : `${(entry.native_change_lamports / 1_000_000_000).toFixed(4)} SOL`}
+                </span>
+            </div>
+            <p class="activity-message">${entry.memo || "No memo attached to this transaction."}</p>
+            <a href="${entry.explorer_url}" target="_blank" rel="noreferrer">Open in Solana Explorer</a>
+        </article>
+    `).join("");
+}
+
+function getPhantomProvider() {
+    const provider = window.phantom?.solana;
+    return provider?.isPhantom ? provider : null;
 }
 
 function updateSnippets() {
@@ -172,6 +260,10 @@ function updateDashboardState() {
         accountSummary.textContent = "Not signed in.";
         sessionMeta.textContent = "Create an account or sign in to issue keys.";
         renderApiKeys([]);
+        currentLinkedWallets = [];
+        selectedWalletAddress = "";
+        renderLinkedWallets([]);
+        resetWalletOverview();
     }
 
     createPolicyButton.disabled = !(signedIn && currentApiKey);
@@ -179,6 +271,9 @@ function updateDashboardState() {
     copyCurlButton.disabled = !(signedIn && currentApiKey);
     copyJsButton.disabled = !(signedIn && currentApiKey);
     runAuthorizeButton.disabled = !(signedIn && currentApiKey && currentPolicyId);
+    connectWalletButton.disabled = !signedIn;
+    refreshWalletButton.disabled = !(signedIn && selectedWalletAddress);
+    unlinkWalletButton.disabled = !(signedIn && selectedWalletAddress);
 }
 
 async function fetchDashboard() {
@@ -200,6 +295,17 @@ async function fetchDashboard() {
 
         currentAccount = data.account;
         renderApiKeys(data.api_keys || []);
+        renderLinkedWallets(data.linked_wallets || []);
+        if (currentLinkedWallets.length) {
+            selectedWalletAddress = currentLinkedWallets.some((wallet) => wallet.wallet_address === selectedWalletAddress)
+                ? selectedWalletAddress
+                : currentLinkedWallets[0].wallet_address;
+            renderLinkedWallets(currentLinkedWallets);
+            await fetchWalletOverview(selectedWalletAddress, false);
+        } else {
+            selectedWalletAddress = "";
+            resetWalletOverview();
+        }
         updateDashboardState();
     } catch (error) {
         clearSession();
@@ -226,6 +332,30 @@ async function authenticate(path, payload, successMessage) {
     registerForm.reset();
     loginForm.reset();
     log(successMessage, "success");
+}
+
+async function fetchWalletOverview(walletAddress, shouldLog = true) {
+    if (!walletAddress || !currentSessionToken) {
+        return;
+    }
+
+    const response = await fetch(`${API_BASE}/v1/accounts/me/solana/wallets/${walletAddress}`, {
+        headers: {
+            Authorization: `Bearer ${currentSessionToken}`,
+        },
+    });
+    const data = await readApiResponse(response);
+    if (!response.ok) {
+        throw new Error(JSON.stringify(data));
+    }
+
+    selectedWalletAddress = walletAddress;
+    renderLinkedWallets(currentLinkedWallets);
+    renderWalletOverview(data);
+    updateDashboardState();
+    if (shouldLog) {
+        log(`Loaded Solana wallet overview for ${walletAddress}`, "success");
+    }
 }
 
 async function loadOverview() {
@@ -275,6 +405,113 @@ logoutButton.addEventListener("click", () => {
     clearSession();
     updateDashboardState();
     log("Signed out of the dashboard.");
+});
+
+walletList.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-wallet-select]");
+    if (!button) {
+        return;
+    }
+    try {
+        await fetchWalletOverview(button.dataset.walletSelect);
+    } catch (error) {
+        log(`Wallet overview failed: ${error.message}`, "error");
+    }
+});
+
+connectWalletButton.addEventListener("click", async () => {
+    if (!currentSessionToken) {
+        return;
+    }
+
+    const provider = getPhantomProvider();
+    if (!provider) {
+        log("Phantom wallet was not detected. Install Phantom and open this site on HTTPS or localhost.", "error");
+        return;
+    }
+
+    try {
+        const connection = await provider.connect();
+        const walletAddress = connection.publicKey?.toString() || provider.publicKey?.toString();
+        if (!walletAddress) {
+            throw new Error("Phantom did not return a wallet address.");
+        }
+
+        const challengeResponse = await fetch(`${API_BASE}/v1/accounts/me/solana/challenge`, {
+            method: "POST",
+            headers: sessionHeaders(),
+            body: JSON.stringify({
+                wallet_address: walletAddress,
+                provider: "phantom",
+            }),
+        });
+        const challenge = await readApiResponse(challengeResponse);
+        if (!challengeResponse.ok) {
+            throw new Error(JSON.stringify(challenge));
+        }
+
+        const encodedMessage = new TextEncoder().encode(challenge.message);
+        const signed = await provider.signMessage(encodedMessage, "utf8");
+        const signature = bytesToBase64(signed.signature || signed);
+
+        const linkResponse = await fetch(`${API_BASE}/v1/accounts/me/solana/link`, {
+            method: "POST",
+            headers: sessionHeaders(),
+            body: JSON.stringify({
+                wallet_address: walletAddress,
+                provider: "phantom",
+                nonce: challenge.nonce,
+                signed_message: challenge.message,
+                signature,
+            }),
+        });
+        const linkedWallet = await readApiResponse(linkResponse);
+        if (!linkResponse.ok) {
+            throw new Error(JSON.stringify(linkedWallet));
+        }
+
+        selectedWalletAddress = linkedWallet.wallet_address;
+        await fetchDashboard();
+        log(`Linked Phantom wallet ${linkedWallet.wallet_address}`, "success");
+    } catch (error) {
+        log(`Wallet link failed: ${error.message}`, "error");
+    }
+});
+
+refreshWalletButton.addEventListener("click", async () => {
+    if (!selectedWalletAddress) {
+        return;
+    }
+    try {
+        await fetchWalletOverview(selectedWalletAddress);
+    } catch (error) {
+        log(`Wallet refresh failed: ${error.message}`, "error");
+    }
+});
+
+unlinkWalletButton.addEventListener("click", async () => {
+    if (!selectedWalletAddress) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/v1/accounts/me/solana/wallets/${selectedWalletAddress}`, {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${currentSessionToken}`,
+            },
+        });
+        const data = await readApiResponse(response);
+        if (!response.ok) {
+            throw new Error(JSON.stringify(data));
+        }
+        const removedWallet = selectedWalletAddress;
+        selectedWalletAddress = "";
+        await fetchDashboard();
+        log(`Unlinked wallet ${removedWallet}`, "success");
+    } catch (error) {
+        log(`Wallet unlink failed: ${error.message}`, "error");
+    }
 });
 
 issueKeyForm.addEventListener("submit", async (event) => {
