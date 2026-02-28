@@ -18,8 +18,15 @@ from sqlalchemy.orm import Session
 from src.database import get_db, engine, Base
 from src.store import DatabaseStore
 from src.auth import verify_api_key
-
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("SentinelAuth")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +41,14 @@ app = FastAPI(
     version="0.1.0",
     description="Policy-based AI action authorization with Solana-backed safety receipts.",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -98,9 +113,11 @@ def authorize(
     x_solana_tx_signature: str | None = Header(default=None, alias="x-solana-tx-signature"),
     db: Session = Depends(get_db)
 ):
+    logger.info(f"Received authorization request for policy: {payload.policy_id}, action: {payload.action.type}")
     store = DatabaseStore(db)
     policy = store.get_policy(payload.policy_id)
     if not policy:
+        logger.warning(f"Authorization denied: Policy {payload.policy_id} not found.")
         raise error_response(
             status_code=status.HTTP_404_NOT_FOUND,
             code="POLICY_NOT_FOUND",
@@ -110,7 +127,9 @@ def authorize(
 
     if policy.rules.max_requests_per_minute is not None:
         recent_requests = store.get_requests_in_last_minute(payload.policy_id)
+        logger.info(f"Rate limit check: {recent_requests}/{policy.rules.max_requests_per_minute} requests in last minute.")
         if recent_requests >= policy.rules.max_requests_per_minute:
+            logger.warning(f"Authorization denied: Rate limit exceeded for {payload.policy_id}.")
             raise error_response(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 code="RATE_LIMIT_EXCEEDED",
@@ -123,11 +142,16 @@ def authorize(
     violation: SafetyViolation | None = None
 
     is_high_risk = (payload.action.amount_usd or 0) >= 1000
-    if is_high_risk and not x_solana_tx_signature:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="High risk actions require a payment token via x-solana-tx-signature header."
-        )
+    if is_high_risk:
+        logger.info(f"High-risk action detected (amount: ${payload.action.amount_usd}). Checking for x402 payment signature...")
+        if not x_solana_tx_signature:
+            logger.warning("x402 verification failed: Missing x-solana-tx-signature header.")
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="High risk actions require a payment token via x-solana-tx-signature header."
+            )
+        else:
+            logger.info(f"x402 verified! Agent provided signature: {x_solana_tx_signature[:15]}...")
 
     if rules.allowed_http_methods and method not in [item.upper() for item in rules.allowed_http_methods]:
         violation = SafetyViolation(
@@ -149,6 +173,12 @@ def authorize(
         )
 
     allowed = violation is None
+    
+    if allowed:
+        logger.info(f"Action '{payload.action.type}' complies with policy rules. Submitting intent hash to Solana Receipt service...")
+    else:
+        logger.warning(f"Action blocked by policy rules: {violation.explanation}")
+
     receipt = receipt_service.anchor(
         {
             "policy_id": payload.policy_id,

@@ -4,10 +4,5 @@ pytest==8.4.1
 httpx==0.28.1
 psycopg2-binary==2.9.10
 SQLAlchemy==2.0.38
-<<<<<<< HEAD
-solana==0.36.11
-solders==0.27.1
-=======
 solana==0.35.1
 solders>=0.21.0,<0.22.0
->>>>>>> 9b2f306 (Crypto wallet fixed)
