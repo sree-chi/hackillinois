@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="page-shell">
         <main class="layout">
@@ -17,6 +21,7 @@
                 <div class="topbar-links">
                     <a class="topbar-link" href="/">Developer Portal</a>
                     <a class="topbar-link topbar-link-active" href="/activity.html">Activity Feed</a>
+                    <a class="topbar-link" href="/agent.html">Agent Demo</a>
                 </div>
             </nav>
 
@@ -49,8 +54,10 @@
                             <input id="activity-policy-id" type="text" placeholder="pol_...">
                         </label>
                         <div class="action-row">
-                            <button id="load-activity-button" class="btn btn-primary" type="submit">Load activity</button>
-                            <button id="clear-activity-button" class="btn btn-ghost" type="button">Clear saved context</button>
+                            <button id="load-activity-button" class="btn btn-primary" type="submit">Load
+                                activity</button>
+                            <button id="clear-activity-button" class="btn btn-ghost" type="button">Clear saved
+                                context</button>
                         </div>
                     </form>
                 </section>
@@ -88,7 +95,8 @@
                     <h2>Audit activity</h2>
                 </div>
                 <div id="activity-empty" class="empty-state">
-                    Load a policy to view transaction receipts, proof issuance, blocked requests, and verification outcomes.
+                    Load a policy to view transaction receipts, proof issuance, blocked requests, and verification
+                    outcomes.
                 </div>
                 <div id="activity-list" class="activity-list"></div>
             </section>
@@ -97,4 +105,5 @@
 
     <script type="module" src="/activity.js"></script>
 </body>
+
 </html>

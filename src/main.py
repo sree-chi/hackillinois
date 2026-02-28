@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+env_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), ".env.local")
+load_dotenv(env_path)
 
 from src.auth import api_key_prefix, generate_api_key, hash_api_key, verify_api_key
 from src.database import Base, engine, get_db
 from src.models import (
+    AgentIntentRequest,
     AuditRecord,
     AuditStatus,
     AuthorizationProof,
@@ -414,6 +421,50 @@ def authorize(
         )
 
     return decision
+
+
+@app.post("/v1/agent/intent", dependencies=[Depends(verify_api_key)])
+def generate_agent_intent(payload: AgentIntentRequest):
+    from dotenv import dotenv_values
+    env_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), ".env.local")
+    logger.info(f"Loading dot env from {env_path}")
+    env = dotenv_values(env_path)
+    logger.info(f"Loaded config: {env}")
+
+    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_Key") or env.get("GEMINI_API_KEY") or env.get("Gemini_API_Key")
+    
+    if not gemini_key:
+        raise HTTPException(status_code=500, detail=f"Gemini API Key is missing. Path: {env_path}. Loaded: {env}. OS env: {os.environ.get('GEMINI_API_KEY')}")
+        
+    genai.configure(api_key=gemini_key)
+    
+    system_prompt = """
+You are an autonomous financial AI agent. 
+Before you act, you MUST request authorization from the Sentinel-Auth API. 
+Return ONLY a valid JSON object matching this schema, with no markdown formatting:
+{
+  "policy_id": "The active policy ID provided in the prompt",
+  "requester": "agent://gemini_financial_bot",
+  "action": {
+    "type": "wire_transfer",
+    "http_method": "POST",
+    "resource": "/wallets/treasury",
+    "amount_usd": <estimated cost as a number>
+  },
+  "reasoning_trace": "A detailed explanation of WHY you are doing this."
+}
+"""
+    
+    try:
+        model = genai.GenerativeModel("gemini-2.5-flash", system_instruction=system_prompt)
+        response = model.generate_content(
+            f"Active Policy: {payload.policy_id}\nCommand: {payload.human_command}",
+            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        )
+        return json.loads(response.text)
+    except Exception as e:
+        logger.exception("Failed to generate Agent Intent via Gemini")
+        raise HTTPException(status_code=500, detail=f"Gemini generation failed: {str(e)}")
 
 
 @app.post("/v1/proofs/verify", dependencies=[Depends(verify_api_key)])

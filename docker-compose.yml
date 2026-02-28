@@ -21,6 +21,8 @@ services:
     build: .
     ports:
       - "8000:8000"
+    env_file:
+      - .env.local
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/sentinel
       - API_KEY=hackillinois_2026_super_secret
@@ -28,7 +30,7 @@ services:
       # Add valid Solana RPC URL and Private Key below when ready
       - SOLANA_RPC_URL=https://api.devnet.solana.com
       - SOLANA_PRIVATE_KEY=[231,178,129,90,93,203,217,120,116,162,83,6,33,255,65,211,205,139,193,95,222,25,155,215,196,100,147,54,122,246,27,120,62,48,27,23,39,184,197,252,62,168,163,206,46,13,159,135,84,7,207,172,249,106,60,189,204,37,131,67,80,54,93,75]
-      - CORS_ALLOW_ORIGINS=http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500   
+      - CORS_ALLOW_ORIGINS=http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500
     depends_on:
       db:
         condition: service_healthy

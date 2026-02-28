@@ -93,6 +93,11 @@ class AuthorizeRequest(BaseModel):
     reasoning_trace: str = Field(min_length=1, max_length=5000)
 
 
+class AgentIntentRequest(BaseModel):
+    policy_id: str
+    human_command: str = Field(min_length=1, max_length=5000)
+
+
 class SafetyViolation(BaseModel):
     category: Literal[
         "method_not_allowed",
