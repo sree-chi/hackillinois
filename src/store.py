@@ -211,6 +211,9 @@ class DatabaseStore:
         return _policy_from_row(new_row)
     
     def get_policy(self, policy_id: str) -> Policy | None:
+        row = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
+        return _policy_from_row(row) if row else None
+        '''
         db_policy = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
         if not db_policy:
             return None
@@ -223,6 +226,57 @@ class DatabaseStore:
             "rules": db_policy.rules,
             "created_at": db_policy.created_at
         })
+        '''
+    
+    def get_latest_policy_version(self, root_policy_id: str) -> Policy | None:
+        row = (
+            self.db.query(PolicyModel)
+            .filter(
+                PolicyModel.root_policy_id == root_policy_id,
+                PolicyModel.superseded_by.is_(None),
+
+            )
+            .order_by(desc(PolicyModel.version))
+            .first()
+        )
+        return _policy_from_row(row) if row else None
+    
+    def list_policy_versions(self, root_policy_id: str) -> list[PolicyVersionSummary]:
+        rows = (
+            self.db.query(PolicyModel)
+            .filter(PolicyModel.root_policy_id == root_policy_id)
+            .order_by(asc(PolicyModel.version))
+            .all()
+        )
+
+        return [
+            PolicyVersionSummary(
+                id=r.id,
+                version=r.version,
+                policy_hash=r.policy_hash,
+                created_at=r.created_at,
+                superseded_by=r.superseded_by,
+            )
+            for r in rows
+        ]
+    
+    def list_policies(self, limit: int = 50, offset: int = 0) -> tuple[list[Policy], int]:
+        total = (
+            self.db.query(PolicyModel)
+            .filter(PolicyModel.superseded_by.is_(None))
+            .count()
+        )
+
+        rows = (
+            self.db.query(PolicyModel)
+            .filter(PolicyModel.superseded_by.is_(None))
+            .order_by(asc(PolicyModel.version))
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        return [_policy_from_row(r) for r in rows], total
 
     def append_audit(self, audit: AuditRecord) -> None:
         db_audit = AuditRecordModel(
@@ -248,6 +302,8 @@ class DatabaseStore:
         )
         self.db.add(db_audit)
         self.db.commit()
+
+    
 
     def create_proof(self, proof: AuthorizationProof) -> None:
         db_proof = AuthorizationProofModel(
