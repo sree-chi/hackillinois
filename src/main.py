@@ -85,6 +85,14 @@ def health_check():
     return {"status": "healthy"}
 
 
+@app.post("/v1/dev/reset-db", dependencies=[Depends(verify_api_key)])
+def reset_database():
+    logger.warning("Resetting the entire database schema! (Hackathon mode)")
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return {"status": "success", "message": "Database wiped and recreated."}
+
+
 def error_response(
     status_code: int,
     code: str,
