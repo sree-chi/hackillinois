@@ -3,7 +3,10 @@ from __future__ import annotations
 import hashlib
 import os
 import json
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger("SolanaPlugin")
 from typing import Any
 
 from solana.rpc.api import Client
@@ -46,9 +49,11 @@ class SolanaReceiptService:
             return SolanaReceipt(status="skipped", signature=None, intent_hash=intent_hash, provider="disabled")
         if self.mode == "mock":
             signature = f"mock_{intent_hash[:32]}"
+            logger.info(f"[Mock Mode] Successfully simulated Solana anchoring. Intent Hash: {intent_hash[:10]}... Signature: {signature[:10]}...")
             return SolanaReceipt(status="anchored", signature=signature, intent_hash=intent_hash, provider="mock")
 
         if self.mode == "live":
+            logger.info(f"[Live Mode] Attempting to anchor Intent Hash: {intent_hash} to {self.rpc_url}")
             if not self.keypair:
                 raise RuntimeError("Live Solana anchoring is configured but SOLANA_PRIVATE_KEY is missing or invalid")
                 
@@ -78,8 +83,10 @@ class SolanaReceiptService:
             
             # Send the transaction
             try:
+                logger.info(f"Sending standard transaction with {len(message.instructions)} instructions to network...")
                 response = self.client.send_transaction(tx)
                 signature = str(response.value)
+                logger.info(f"✅ Success! Live Solana Receipt anchored: {signature}")
                 return SolanaReceipt(
                     status="anchored", 
                     signature=signature, 

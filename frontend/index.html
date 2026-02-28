@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel-Auth Demo</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="glow-bg"></div>
+
+    <main class="container">
+        <header>
+            <h1>Sentinel-Auth <span>The Policy-Gated API Proxy</span></h1>
+            <p>Agentic intent verification backed by Solana's lightning-fast Alpenglow finality.</p>
+        </header>
+
+        <div class="dashboard">
+            <!-- Left Side: Actions -->
+            <section class="panel actions-panel">
+                <h2>Agent Actions</h2>
+                <p class="subtitle">Simulate AI Agent API Calls</p>
+
+                <div class="action-card">
+                    <h3>1. Create AI Safety Policy</h3>
+                    <p>Enforce strict API rules (e.g. Max Spend: $5,000).</p>
+                    <button id="btn-create-policy" class="btn primary">Deploy Policy</button>
+                    <div id="policy-status" class="status-indicator"></div>
+                </div>
+
+                <div class="action-card">
+                    <h3>2. Safe Action (Low Risk)</h3>
+                    <p>Request: $500 Wire Transfer. Within limits.</p>
+                    <button id="btn-safe-action" class="btn secondary" disabled>Execute $500 Transfer</button>
+                </div>
+
+                <div class="action-card warning">
+                    <h3>3. High-Risk Action (x402 Trigger)</h3>
+                    <p>Request: $2000 Wire Transfer. Triggers x402 Payment Required.</p>
+                    <button id="btn-high-risk" class="btn secondary" disabled>Execute $2000 Transfer</button>
+                </div>
+
+                <div class="action-card success">
+                    <h3>4. x402 Solana Unlock</h3>
+                    <p>Agent signs a transaction to pay for the $2000 intent audit.</p>
+                    <button id="btn-unlock" class="btn solana" disabled>Sign & Execute Transfer</button>
+                </div>
+            </section>
+
+            <!-- Right Side: Live Logs -->
+            <section class="panel console-panel">
+                <div class="console-header">
+                    <h2>Live Audit Console</h2>
+                    <span class="pulse"></span>
+                </div>
+                <div class="console-window" id="console-output">
+                    <!-- Logs go here -->
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
