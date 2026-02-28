@@ -24,6 +24,7 @@ class PolicyModel(Base):
     # Using JSONB if on postgres, otherwise JSON for sqlite fallback if needed, but JSON is safer cross-db
     rules = Column(JSON, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    idempotency_key = Column(String, unique=True, index=True, nullable=True)
 
 class AuditRecordModel(Base):
     __tablename__ = "audit_records"

@@ -32,6 +32,7 @@ class PolicyRule(BaseModel):
     allowed_http_methods: list[str] = Field(default_factory=list)
     max_spend_usd: float | None = None
     requires_human_approval_for_delete: bool = False
+    max_requests_per_minute: int | None = Field(default=None, ge=1)
 
 
 class CreatePolicyRequest(BaseModel):

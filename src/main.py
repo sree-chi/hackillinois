@@ -93,7 +93,11 @@ def get_policy(policy_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/v1/authorize", dependencies=[Depends(verify_api_key)])
-def authorize(payload: AuthorizeRequest, db: Session = Depends(get_db)):
+def authorize(
+    payload: AuthorizeRequest,
+    x_solana_tx_signature: str | None = Header(default=None, alias="x-solana-tx-signature"),
+    db: Session = Depends(get_db)
+):
     store = DatabaseStore(db)
     policy = store.get_policy(payload.policy_id)
     if not policy:
@@ -104,9 +108,26 @@ def authorize(payload: AuthorizeRequest, db: Session = Depends(get_db)):
             policy_id=payload.policy_id,
         )
 
+    if policy.rules.max_requests_per_minute is not None:
+        recent_requests = store.get_requests_in_last_minute(payload.policy_id)
+        if recent_requests >= policy.rules.max_requests_per_minute:
+            raise error_response(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                code="RATE_LIMIT_EXCEEDED",
+                message="The maximum number of requests per minute for this policy has been exceeded.",
+                policy_id=payload.policy_id,
+            )
+
     method = payload.action.http_method.upper()
     rules = policy.rules
     violation: SafetyViolation | None = None
+
+    is_high_risk = (payload.action.amount_usd or 0) >= 1000
+    if is_high_risk and not x_solana_tx_signature:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="High risk actions require a payment token via x-solana-tx-signature header."
+        )
 
     if rules.allowed_http_methods and method not in [item.upper() for item in rules.allowed_http_methods]:
         violation = SafetyViolation(

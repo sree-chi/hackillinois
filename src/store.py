@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -12,10 +12,17 @@ class DatabaseStore:
         self.db = db
 
     def create_policy(self, payload: CreatePolicyRequest, idempotency_key: str | None) -> Policy:
-        # Note: in a true production system, idempotency keys should be stored in a dedicated table 
-        # or Redis cache to handle concurrent requests properly. For simplicity we skip that here 
-        # or rely on the caller to manage it if needed, but we'll create the policy.
-        
+        if idempotency_key:
+            existing = self.db.query(PolicyModel).filter(PolicyModel.idempotency_key == idempotency_key).first()
+            if existing:
+                return Policy.model_validate({
+                    "id": existing.id,
+                    "name": existing.name,
+                    "description": existing.description,
+                    "rules": existing.rules,
+                    "created_at": existing.created_at
+                })
+
         policy_data = Policy(**payload.model_dump())
         
         db_policy = PolicyModel(
@@ -24,6 +31,7 @@ class DatabaseStore:
             description=policy_data.description,
             rules=policy_data.rules.model_dump(),
             created_at=policy_data.created_at,
+            idempotency_key=idempotency_key
         )
         self.db.add(db_policy)
         self.db.commit()
@@ -100,3 +108,10 @@ class DatabaseStore:
 
 # Note: The global `store = InMemoryStore()` in main.py will need to be replaced 
 # with dependency injection of DatabaseStore(db) into the route handlers.
+
+    def get_requests_in_last_minute(self, policy_id: str) -> int:
+        one_min_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
+        return self.db.query(AuditRecordModel).filter(
+            AuditRecordModel.policy_id == policy_id,
+            AuditRecordModel.created_at >= one_min_ago
+        ).count()

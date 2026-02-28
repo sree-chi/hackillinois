@@ -12,7 +12,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,11 +23,11 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/sentinel
-      - API_KEY=default-dev-key
-      - SOLANA_RECEIPT_MODE=mock
+      - API_KEY=hackillinois_2026_super_secret
+      - SOLANA_RECEIPT_MODE=live
       # Add valid Solana RPC URL and Private Key below when ready
-      # - SOLANA_RPC_URL=https://api.devnet.solana.com
-      # - SOLANA_PRIVATE_KEY=[1,2,3...255]
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - SOLANA_PRIVATE_KEY=[231,178,129,90,93,203,217,120,116,162,83,6,33,255,65,211,205,139,193,95,222,25,155,215,196,100,147,54,122,246,27,120,62,48,27,23,39,184,197,252,62,168,163,206,46,13,159,135,84,7,207,172,249,106,60,189,204,37,131,67,80,54,93,75]
     depends_on:
       db:
         condition: service_healthy
