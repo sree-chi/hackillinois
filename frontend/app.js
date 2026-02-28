@@ -14,16 +14,10 @@ const btnHighRisk = document.getElementById('btn-high-risk');
 const btnUnlock = document.getElementById('btn-unlock');
 
 function resolveApiBase() {
-    let base;
-    const configuredBase = import.meta.env.VITE_API_BASE?.trim();
-    if (configuredBase) {
-        base = configuredBase.replace(/\/+$/, '');
-    } else {
-        const { origin, hostname } = window.location;
-        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-        base = isLocalhost ? 'http://localhost:8000' : `${origin}/server`;
-    }
-    return base.replace(/([^:]\/)\/+/g, "$1"); // Normalize internal double slashes
+    // Derive API URL from browser location at runtime - no env var injection needed.
+    const { hostname, origin } = window.location;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    return isLocalhost ? 'http://localhost:8000' : `${origin}/server`;
 }
 
 async function readApiResponse(res) {
