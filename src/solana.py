@@ -56,12 +56,18 @@ class SolanaReceiptService:
         return self.mock_issuer
 
     def _intent_hash(self, payload: dict[str, Any]) -> str:
-        canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        normalized = self._normalize_payload(payload)
+        canonical_payload = json.dumps(
+            normalized, 
+            sort_keys=True, 
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
         return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
     def _normalize_payload(self, payload: Any) -> Any:
         if isinstance(payload, dict):
-            return {key: self._normalize_payload(value) for key, value in payload.items()}
+            return {key: self._normalize_payload(payload[key]) for key in sorted(payload)}
         if isinstance(payload, list):
             return [self._normalize_payload(item) for item in payload]
         if isinstance(payload, datetime):
