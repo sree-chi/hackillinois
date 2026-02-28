@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="page-shell">
         <main class="layout">
@@ -25,7 +29,8 @@
                 <h1>Issue a key, wire your agent, and route every risky action through policy checks.</h1>
                 <p class="hero-copy">
                     Sentinel Auth is a developer-facing policy gateway for AI agents. Generate a key from this page,
-                    create a starter policy, and test a live authorization request without editing environment variables.
+                    create a starter policy, and test a live authorization request without editing environment
+                    variables.
                 </p>
                 <div class="hero-meta">
                     <div>
@@ -57,7 +62,8 @@
                         </label>
                         <label>
                             <span>Owner email</span>
-                            <input id="owner-email" name="owner_email" type="email" placeholder="team@example.com" required>
+                            <input id="owner-email" name="owner_email" type="email" placeholder="team@example.com"
+                                required>
                         </label>
                         <label>
                             <span>Owner name</span>
@@ -65,7 +71,8 @@
                         </label>
                         <label>
                             <span>Use case</span>
-                            <textarea id="use-case" name="use_case" rows="4" placeholder="Describe what your AI agents will manage."></textarea>
+                            <textarea id="use-case" name="use_case" rows="4"
+                                placeholder="Describe what your AI agents will manage."></textarea>
                         </label>
                         <button id="issue-key-button" class="btn btn-primary" type="submit">Issue API key</button>
                     </form>
@@ -91,7 +98,8 @@
                             <h3>cURL</h3>
                             <button id="copy-curl-button" class="btn btn-ghost" type="button" disabled>Copy</button>
                         </div>
-                        <pre id="curl-snippet" class="snippet">Issue a key to generate a ready-to-run cURL example.</pre>
+                        <pre id="curl-snippet"
+                            class="snippet">Issue a key to generate a ready-to-run cURL example.</pre>
                     </div>
 
                     <div class="snippet-group">
@@ -111,16 +119,38 @@
                         <h2>Test your key</h2>
                     </div>
                     <p class="muted">
-                        This creates a starter policy and submits a sample AI action through <code>/v1/authorize</code>.
+                        This creates a custom policy and submits a sample AI action through <code>/v1/authorize</code>.
                     </p>
+                    <div class="policy-configuration-form stack"
+                        style="margin-bottom: 20px; margin-top: 20px; padding: 15px; border: 1px solid var(--line); border-radius: 8px;">
+                        <h3>Configure Your Security Policy</h3>
+
+                        <label>
+                            <span>Policy Name</span>
+                            <input id="custom-policy-name" type="text" value="Custom Agent Policy">
+                        </label>
+
+                        <label>
+                            <span>Maximum Spend Limit (USD)</span>
+                            <input id="custom-spend-limit" type="number" value="1000" min="0">
+                        </label>
+
+                        <label>
+                            <span>Max Requests per Minute</span>
+                            <input id="custom-rate-limit" type="number" value="60" min="1">
+                        </label>
+                    </div>
                     <div class="action-row">
-                        <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create starter policy</button>
-                        <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample authorize</button>
+                        <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create custom
+                            policy</button>
+                        <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample
+                            authorize</button>
                     </div>
                     <div class="output-card">
                         <h3>Current policy</h3>
                         <code id="policy-id-label">No policy created yet.</code>
-                        <p class="muted">Open the Activity Feed to inspect receipts, blocked requests, and verification messages.</p>
+                        <p class="muted">Open the Activity Feed to inspect receipts, blocked requests, and verification
+                            messages.</p>
                         <div class="action-row">
                             <a class="btn btn-ghost" href="/activity.html">Open activity feed</a>
                         </div>
@@ -140,4 +170,5 @@
 
     <script type="module" src="/app.js"></script>
 </body>
+
 </html>

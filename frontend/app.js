@@ -184,7 +184,12 @@ createPolicyButton.addEventListener("click", async () => {
     }
 
     createPolicyButton.disabled = true;
-    log("Creating starter policy with the issued key ...");
+    log("Creating custom policy with the issued key ...");
+
+    // 1. Grab the values from the HTML input fields
+    const policyName = document.getElementById("custom-policy-name").value;
+    const maxSpend = parseFloat(document.getElementById("custom-spend-limit").value);
+    const maxRequests = parseInt(document.getElementById("custom-rate-limit").value);
 
     try {
         const response = await fetch(`${API_BASE}/v1/policies`, {
@@ -194,12 +199,12 @@ createPolicyButton.addEventListener("click", async () => {
                 "Idempotency-Key": `portal-${Date.now()}`,
             },
             body: JSON.stringify({
-                name: "Public portal starter policy",
-                description: "Default policy issued from the public developer portal.",
+                name: policyName, // Use the user's custom name
+                description: "Custom policy issued from the public developer portal.",
                 rules: {
                     allowed_http_methods: ["GET", "POST"],
-                    max_spend_usd: 5000,
-                    max_requests_per_minute: 60,
+                    max_spend_usd: maxSpend, // Use the user's custom spend limit
+                    max_requests_per_minute: maxRequests, // Use the user's custom rate limit
                 },
             }),
         });
@@ -214,9 +219,11 @@ createPolicyButton.addEventListener("click", async () => {
         policyIdLabel.textContent = currentPolicyId;
         runAuthorizeButton.disabled = false;
         updateSnippets();
-        log(`Starter policy created: ${currentPolicyId}`, "success");
+
+        // Let the user know exactly what they created
+        log(`Custom policy created! ID: ${currentPolicyId} (Limit: $${maxSpend})`, "success");
     } catch (error) {
-        log(`Starter policy creation failed: ${error.message}`, "error");
+        log(`Policy creation failed: ${error.message}`, "error");
         createPolicyButton.disabled = false;
     }
 });
