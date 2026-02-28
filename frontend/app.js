@@ -1,3 +1,5 @@
+import * as solanaWeb3 from '@solana/web3.js';
+
 const API_BASE = 'https://hackillinois-tbrqg.ondigitalocean.app';
 const AUTH_HEADER = 'Bearer hackillinois_2026_super_secret';
 const btnExpensiveApi = document.getElementById('btn-expensive-api');
@@ -51,10 +53,10 @@ btnCreate.addEventListener('click', async () => {
             log(`Success! Created Policy ID: <strong>${currentPolicyId}</strong>`, 'success');
             btnSafe.disabled = false;
             btnHighRisk.disabled = false;
-            
+
             // Enable our new demo button
-            btnExpensiveApi.disabled = false; 
-            
+            btnExpensiveApi.disabled = false;
+
             btnCreate.disabled = true;
             btnCreate.textContent = "Policy Active";
         } else {
@@ -243,7 +245,7 @@ btnExpensiveApi.addEventListener('click', async () => {
                 action: {
                     type: "premium_compute",
                     http_method: "POST",
-                    resource: NGROK_URL, 
+                    resource: NGROK_URL,
                     amount_usd: 10000 // Forces the flag because policy max is $5000
                 },
                 reasoning_trace: "Running intensive data aggregation model on the external ngrok compute cluster."
@@ -257,12 +259,12 @@ btnExpensiveApi.addEventListener('click', async () => {
             log(`Reason: ${data.detail.error.message}`, 'error');
             log(`The expensive ngrok API was NOT called.`, 'success');
         } else if (sentinelRes.status === 402) {
-             log(`🚨 FLAG TRIPPED: 402 Payment Required!`, 'error');
-             log(`Action exceeds risk threshold. Solana x402 verification required before calling ngrok.`, 'info');
+            log(`🚨 FLAG TRIPPED: 402 Payment Required!`, 'error');
+            log(`Action exceeds risk threshold. Solana x402 verification required before calling ngrok.`, 'info');
         } else if (sentinelRes.ok) {
             const data = await sentinelRes.json();
             log(`Sentinel Approved. Receipt: ${data.receipt_signature}`, 'success');
-            
+
             // STEP 3: Actually execute the expensive API call since it was approved
             log(`Executing request to ${NGROK_URL}...`, 'info');
             try {
