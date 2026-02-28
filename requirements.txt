@@ -4,5 +4,5 @@ pytest==8.4.1
 httpx==0.28.1
 psycopg2-binary==2.9.10
 SQLAlchemy==2.0.38
-solana==0.35.1
-solders>=0.21.0,<0.22.0
+solana==0.35.11
+solders==0.21.0,<0.22.0
