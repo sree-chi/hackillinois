@@ -16,6 +16,8 @@ export default defineConfig({
             input: {
                 main: resolve(__dirname, 'index.html'),
                 activity: resolve(__dirname, 'activity.html'),
+                agent: resolve(__dirname, 'agent.html'), // Added Agent page
+                openaidocs: resolve(__dirname, 'open-ai-docs/index.html'), // Added OpenAI Docs
             },
         },
     },
