@@ -65,6 +65,21 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def read_root():
+    return {
+        "name": "Sentinel-Auth API",
+        "status": "online",
+        "docs_url": "/docs",
+        "message": "Welcome to the Sentinel-Auth API. Please use the /v1 endpoints."
+    }
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+
 def error_response(
     status_code: int,
     code: str,
