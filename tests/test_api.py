@@ -319,6 +319,92 @@ def test_high_risk_action_requires_verified_signature():
     assert verified.json()["allowed"] is True
 
 
+def test_live_high_risk_verification_accepts_confirmed_tx_with_matching_memo_and_payment(monkeypatch):
+    monkeypatch.setattr(receipt_service, "mode", "live")
+    monkeypatch.setattr(receipt_service, "required_commitment", "confirmed")
+    monkeypatch.setattr(receipt_service, "require_memo", True)
+    monkeypatch.setattr(receipt_service, "payment_recipient", "treasury-wallet")
+    monkeypatch.setattr(receipt_service, "payment_min_lamports", 1000)
+    monkeypatch.setattr(
+        receipt_service,
+        "_get_signature_status",
+        lambda signature: {"err": None, "confirmationStatus": "finalized"},
+    )
+    monkeypatch.setattr(
+        receipt_service,
+        "_get_transaction",
+        lambda signature: {
+            "meta": {"err": None, "innerInstructions": []},
+            "transaction": {
+                "message": {
+                    "instructions": [
+                        {
+                            "program": "system",
+                            "parsed": {
+                                "info": {
+                                    "destination": "treasury-wallet",
+                                    "lamports": 1500,
+                                }
+                            },
+                        },
+                        {
+                            "program": "spl-memo",
+                            "parsed": "action_hash_123",
+                        },
+                    ]
+                }
+            },
+        },
+    )
+
+    assert receipt_service.verify_high_risk_signature(
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        {"policy_id": "pol_live"},
+        action_hash="action_hash_123",
+    ) is True
+
+
+def test_live_high_risk_verification_rejects_missing_required_memo(monkeypatch):
+    monkeypatch.setattr(receipt_service, "mode", "live")
+    monkeypatch.setattr(receipt_service, "required_commitment", "confirmed")
+    monkeypatch.setattr(receipt_service, "require_memo", True)
+    monkeypatch.setattr(receipt_service, "payment_recipient", "treasury-wallet")
+    monkeypatch.setattr(receipt_service, "payment_min_lamports", 1000)
+    monkeypatch.setattr(
+        receipt_service,
+        "_get_signature_status",
+        lambda signature: {"err": None, "confirmationStatus": "finalized"},
+    )
+    monkeypatch.setattr(
+        receipt_service,
+        "_get_transaction",
+        lambda signature: {
+            "meta": {"err": None, "innerInstructions": []},
+            "transaction": {
+                "message": {
+                    "instructions": [
+                        {
+                            "program": "system",
+                            "parsed": {
+                                "info": {
+                                    "destination": "treasury-wallet",
+                                    "lamports": 1500,
+                                }
+                            },
+                        }
+                    ]
+                }
+            },
+        },
+    )
+
+    assert receipt_service.verify_high_risk_signature(
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        {"policy_id": "pol_live"},
+        action_hash="action_hash_123",
+    ) is False
+
+
 def test_authorize_blocks_excessive_spend():
     policy_id = create_default_policy()
 

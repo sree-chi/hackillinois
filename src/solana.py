@@ -5,6 +5,8 @@ import hashlib
 import json
 import logging
 import os
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -39,6 +41,10 @@ class SolanaReceiptService:
         self.client = Client(self.rpc_url)
         self.mock_signing_secret = os.getenv("SOLANA_PROOF_SECRET", "sentinel-proof-secret")
         self.mock_issuer = os.getenv("SOLANA_PROOF_ISSUER", "sentinel-mock-issuer")
+        self.required_commitment = os.getenv("SOLANA_REQUIRED_COMMITMENT", "confirmed").lower()
+        self.payment_recipient = os.getenv("SOLANA_PAYMENT_RECIPIENT")
+        self.payment_min_lamports = int(os.getenv("SOLANA_PAYMENT_MIN_LAMPORTS", "0"))
+        self.require_memo = os.getenv("SOLANA_PAYMENT_REQUIRE_MEMO", "false").lower() == "true"
 
         pk_env = os.getenv("SOLANA_PRIVATE_KEY")
         if pk_env:
@@ -97,6 +103,95 @@ class SolanaReceiptService:
     def action_hash(self, payload: dict[str, Any]) -> str:
         return self._intent_hash(payload)
 
+    def _commitment_rank(self, commitment: str | None) -> int:
+        order = {"processed": 0, "confirmed": 1, "finalized": 2}
+        return order.get((commitment or "").lower(), -1)
+
+    def _rpc_json(self, method: str, params: list[Any]) -> dict[str, Any]:
+        payload = json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": method,
+            "params": params,
+        }).encode("utf-8")
+        req = urllib_request.Request(
+            self.rpc_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except (urllib_error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise SolanaVerificationError(f"Unable to call Solana RPC method {method}") from exc
+
+        if "error" in data:
+            raise SolanaVerificationError(f"Solana RPC {method} failed: {data['error']}")
+
+        return data
+
+    def _get_signature_status(self, signature: str) -> dict[str, Any] | None:
+        response = self._rpc_json("getSignatureStatuses", [[signature], {"searchTransactionHistory": True}])
+        values = response.get("result", {}).get("value", [])
+        return values[0] if values else None
+
+    def _get_transaction(self, signature: str) -> dict[str, Any] | None:
+        response = self._rpc_json(
+            "getTransaction",
+            [
+                signature,
+                {
+                    "encoding": "jsonParsed",
+                    "commitment": self.required_commitment,
+                    "maxSupportedTransactionVersion": 0,
+                },
+            ],
+        )
+        return response.get("result")
+
+    def _iter_transaction_instructions(self, tx: dict[str, Any]) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        message = tx.get("transaction", {}).get("message", {})
+        for instruction in message.get("instructions", []):
+            if isinstance(instruction, dict):
+                result.append(instruction)
+
+        for group in tx.get("meta", {}).get("innerInstructions", []):
+            for instruction in group.get("instructions", []):
+                if isinstance(instruction, dict):
+                    result.append(instruction)
+        return result
+
+    def _memo_matches_action_hash(self, tx: dict[str, Any], action_hash: str) -> bool:
+        for instruction in self._iter_transaction_instructions(tx):
+            rendered = json.dumps(instruction, sort_keys=True)
+            if action_hash in rendered:
+                return True
+        return False
+
+    def _lamports_sent_to_recipient(self, tx: dict[str, Any], recipient: str) -> int:
+        lamports = 0
+        for instruction in self._iter_transaction_instructions(tx):
+            parsed = instruction.get("parsed")
+            if not isinstance(parsed, dict):
+                continue
+
+            info = parsed.get("info")
+            if not isinstance(info, dict):
+                continue
+
+            destination = info.get("destination")
+            amount = info.get("lamports")
+            if destination != recipient or amount is None:
+                continue
+
+            try:
+                lamports += int(amount)
+            except (TypeError, ValueError):
+                continue
+        return lamports
+
     def build_authorization_proof(self, claims: dict[str, Any]) -> dict[str, Any]:
         proof_claims = {**claims, "issuer": self.issuer()}
         proof_claims["signature"] = self._proof_signature(proof_claims)
@@ -107,7 +202,7 @@ class SolanaReceiptService:
         expected = self._proof_signature(unsigned_claims)
         return expected == signature
 
-    def verify_high_risk_signature(self, signature: str | None, payload: dict[str, Any]) -> bool:
+    def verify_high_risk_signature(self, signature: str | None, payload: dict[str, Any], action_hash: str | None = None) -> bool:
         if not signature:
             return False
 
@@ -121,17 +216,41 @@ class SolanaReceiptService:
             raise SolanaVerificationError(f"Unknown Solana verification mode: {self.mode}")
 
         try:
-            parsed_signature = Signature.from_string(signature)
+            Signature.from_string(signature)
         except Exception:
             return False
 
         try:
-            response = self.client.get_signature_statuses([parsed_signature])
+            status = self._get_signature_status(signature)
+            tx = self._get_transaction(signature)
         except Exception as exc:
             raise SolanaVerificationError("Unable to verify the Solana transaction signature") from exc
 
-        status = response.value[0] if response.value else None
-        return status is not None and status.err is None
+        if not status or status.get("err") is not None:
+            return False
+
+        if self._commitment_rank(status.get("confirmationStatus")) < self._commitment_rank(self.required_commitment):
+            return False
+
+        if not tx:
+            return False
+
+        if tx.get("meta", {}).get("err") is not None:
+            return False
+
+        if action_hash:
+            memo_matches = self._memo_matches_action_hash(tx, action_hash)
+            if self.require_memo and not memo_matches:
+                return False
+
+        if self.payment_recipient:
+            lamports_sent = self._lamports_sent_to_recipient(tx, self.payment_recipient)
+            if lamports_sent <= 0:
+                return False
+            if self.payment_min_lamports and lamports_sent < self.payment_min_lamports:
+                return False
+
+        return True
 
     def anchor(self, payload: dict[str, Any]) -> SolanaReceipt:
         intent_hash = self._intent_hash(payload)

@@ -12,6 +12,14 @@
 <body>
     <div class="page-shell">
         <main class="layout">
+            <nav class="topbar panel">
+                <a class="brand-link" href="/">Sentinel Auth</a>
+                <div class="topbar-links">
+                    <a class="topbar-link topbar-link-active" href="/">Developer Portal</a>
+                    <a class="topbar-link" href="/activity.html">Activity Feed</a>
+                </div>
+            </nav>
+
             <section class="hero panel">
                 <p class="eyebrow">Public API For AI Agent Control</p>
                 <h1>Issue a key, wire your agent, and route every risky action through policy checks.</h1>
@@ -112,6 +120,10 @@
                     <div class="output-card">
                         <h3>Current policy</h3>
                         <code id="policy-id-label">No policy created yet.</code>
+                        <p class="muted">Open the Activity Feed to inspect receipts, blocked requests, and verification messages.</p>
+                        <div class="action-row">
+                            <a class="btn btn-ghost" href="/activity.html">Open activity feed</a>
+                        </div>
                     </div>
                 </section>
 

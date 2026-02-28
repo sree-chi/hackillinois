@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'node:path';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig({
@@ -10,4 +11,12 @@ export default defineConfig({
             },
         }),
     ],
+    build: {
+        rollupOptions: {
+            input: {
+                main: resolve(__dirname, 'index.html'),
+                activity: resolve(__dirname, 'activity.html'),
+            },
+        },
+    },
 });
