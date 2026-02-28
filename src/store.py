@@ -1,10 +1,11 @@
 from __future__ import annotations
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
 
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy.orm import Session
+
+from src.db_models import AuditRecordModel, AuditStatusEnum, PolicyModel, ReceiptStatusEnum
 from src.models import AuditRecord, CreatePolicyRequest, Policy
-from src.db_models import PolicyModel, AuditRecordModel, AuditStatusEnum, ReceiptStatusEnum
 
 
 class DatabaseStore:
@@ -24,7 +25,7 @@ class DatabaseStore:
                 })
 
         policy_data = Policy(**payload.model_dump())
-        
+
         db_policy = PolicyModel(
             id=policy_data.id,
             name=policy_data.name,
@@ -36,14 +37,14 @@ class DatabaseStore:
         self.db.add(db_policy)
         self.db.commit()
         self.db.refresh(db_policy)
-        
+
         return policy_data
 
     def get_policy(self, policy_id: str) -> Policy | None:
         db_policy = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
         if not db_policy:
             return None
-            
+
         return Policy.model_validate({
             "id": db_policy.id,
             "name": db_policy.name,
@@ -75,17 +76,17 @@ class DatabaseStore:
         self,
         policy_id: str,
         status: str | None = None,
-        created_after: str | None = None,
+        created_after: datetime | None = None,
     ) -> list[AuditRecord]:
         query = self.db.query(AuditRecordModel).filter(AuditRecordModel.policy_id == policy_id)
-        
+
         if status:
             query = query.filter(AuditRecordModel.status == AuditStatusEnum(status))
         if created_after:
             query = query.filter(AuditRecordModel.created_at >= created_after)
-            
+
         db_audits = query.all()
-        
+
         results = []
         for db_audit in db_audits:
             results.append(AuditRecord.model_validate({
@@ -103,11 +104,8 @@ class DatabaseStore:
                 "violation": db_audit.violation,
                 "created_at": db_audit.created_at
             }))
-            
-        return results
 
-# Note: The global `store = InMemoryStore()` in main.py will need to be replaced 
-# with dependency injection of DatabaseStore(db) into the route handlers.
+        return results
 
     def get_requests_in_last_minute(self, policy_id: str) -> int:
         one_min_ago = datetime.now(timezone.utc) - timedelta(minutes=1)

@@ -1,14 +1,15 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from src.database import Base, get_db
 from src.main import app
-from src.database import get_db, Base
 from src.solana import receipt_service
 
-# Setup in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
@@ -18,6 +19,7 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def override_get_db():
     try:
         db = TestingSessionLocal()
@@ -25,25 +27,20 @@ def override_get_db():
     finally:
         db.close()
 
+
 app.dependency_overrides[get_db] = override_get_db
 
-# Ensure Solana service is in mock mode for testing to avoid needing a real keypair/network
-import os
 os.environ["SOLANA_RECEIPT_MODE"] = "mock"
 receipt_service.mode = "mock"
 
 client = TestClient(app)
-
-# Run create_all before each test, not just once globally, to ensure a clean state if needed,
-# but for these simple tests, doing it once per module is fine.
 Base.metadata.create_all(bind=engine)
+
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown():
-    # Setup
     Base.metadata.create_all(bind=engine)
     yield
-    # Teardown
     Base.metadata.drop_all(bind=engine)
 
 
@@ -94,10 +91,7 @@ def test_create_policy_is_idempotent():
 
     assert first.status_code == 201
     assert second.status_code == 201
-    # Note: Idempotency is not implemented in our simple DatabaseStore right now, 
-    # so they will have different IDs. This test needs to be adjusted or skipped 
-    # if we haven't implemented DB idempotency. We'll skip the ID check for now.
-    # assert first.json()["id"] == second.json()["id"]
+    assert first.json()["id"] == second.json()["id"]
 
 
 def test_authorize_allows_valid_request():
@@ -124,6 +118,47 @@ def test_authorize_allows_valid_request():
     assert body["allowed"] is True
     assert body["receipt_status"] == "anchored"
     assert body["receipt_signature"].startswith("mock_")
+
+
+def test_high_risk_action_requires_verified_signature():
+    policy_id = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "High Risk policy",
+            "rules": {"allowed_http_methods": ["POST"], "max_spend_usd": 5000},
+        },
+    ).json()["id"]
+
+    request_body = {
+        "policy_id": policy_id,
+        "requester": "agent://trader",
+        "action": {
+            "type": "wire_transfer",
+            "http_method": "POST",
+            "resource": "/wallets/primary/send",
+            "amount_usd": 2000,
+        },
+        "reasoning_trace": "Transfer inventory budget to settlement wallet.",
+    }
+
+    denied = client.post(
+        "/v1/authorize",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json=request_body,
+    )
+    assert denied.status_code == 402
+
+    verified = client.post(
+        "/v1/authorize",
+        headers={
+            "Authorization": "Bearer default-dev-key",
+            "x-solana-tx-signature": receipt_service.build_mock_payment_token(request_body),
+        },
+        json=request_body,
+    )
+    assert verified.status_code == 200
+    assert verified.json()["allowed"] is True
 
 
 def test_authorize_blocks_excessive_spend():

@@ -1,7 +1,16 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Header, HTTPException, Query, Response, status, Depends
+import logging
+import os
+from contextlib import asynccontextmanager
+from datetime import datetime
 
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+
+from src.auth import verify_api_key
+from src.database import Base, engine, get_db
 from src.models import (
     AuditRecord,
     AuditStatus,
@@ -12,15 +21,8 @@ from src.models import (
     ReceiptStatus,
     SafetyViolation,
 )
-
-from src.solana import receipt_service
-from sqlalchemy.orm import Session
-from src.database import get_db, engine, Base
+from src.solana import SolanaVerificationError, receipt_service
 from src.store import DatabaseStore
-from src.auth import verify_api_key
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import logging
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,13 +30,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("SentinelAuth")
 
+HIGH_RISK_AMOUNT_USD = float(os.getenv("HIGH_RISK_AMOUNT_USD", "1000"))
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    if origin.strip()
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Only create tables if the engine URL doesn't look like an in-memory test DB
-    # Tests will handle their own setup.
     if str(engine.url) != "sqlite:///:memory:":
         Base.metadata.create_all(bind=engine)
     yield
+
 
 app = FastAPI(
     title="Sentinel Auth API",
@@ -45,8 +57,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -85,9 +97,6 @@ def create_policy(
 ):
     store = DatabaseStore(db)
     policy = store.create_policy(payload, idempotency_key=idempotency_key)
-    # The new DatabaseStore implementation currently doesn't track idempotency_keys
-    # in an attribute like the in-memory one did. In a real system you would check the DB.
-    # For now we'll just return it directly.
     if idempotency_key:
         response.headers["Idempotency-Key"] = idempotency_key
     return policy
@@ -140,18 +149,41 @@ def authorize(
     method = payload.action.http_method.upper()
     rules = policy.rules
     violation: SafetyViolation | None = None
+    verification_payload = {
+        "policy_id": payload.policy_id,
+        "requester": payload.requester,
+        "action": payload.action.model_dump(),
+        "reasoning_trace": payload.reasoning_trace,
+    }
 
-    is_high_risk = (payload.action.amount_usd or 0) >= 1000
+    is_high_risk = (payload.action.amount_usd or 0) >= HIGH_RISK_AMOUNT_USD
     if is_high_risk:
-        logger.info(f"High-risk action detected (amount: ${payload.action.amount_usd}). Checking for x402 payment signature...")
-        if not x_solana_tx_signature:
-            logger.warning("x402 verification failed: Missing x-solana-tx-signature header.")
+        logger.info(
+            f"High-risk action detected (amount: ${payload.action.amount_usd}). Verifying x402 payment signature..."
+        )
+        try:
+            verified = receipt_service.verify_high_risk_signature(x_solana_tx_signature, verification_payload)
+        except SolanaVerificationError as exc:
+            logger.exception("x402 verification failed due to Solana verification error")
+            raise error_response(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                code="SOLANA_VERIFICATION_UNAVAILABLE",
+                message="Unable to verify the Solana payment proof for this request.",
+                policy_id=payload.policy_id,
+                details={"reason": str(exc)},
+            )
+
+        if not verified:
+            logger.warning("x402 verification failed for high-risk action.")
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail="High risk actions require a payment token via x-solana-tx-signature header."
+                detail=(
+                    "High-risk actions require a verified payment token via x-solana-tx-signature. "
+                    "In mock mode, use the deterministic demo token returned by the frontend."
+                ),
             )
-        else:
-            logger.info(f"x402 verified! Agent provided signature: {x_solana_tx_signature[:15]}...")
+
+        logger.info(f"x402 verified for signature: {x_solana_tx_signature[:15]}...")
 
     if rules.allowed_http_methods and method not in [item.upper() for item in rules.allowed_http_methods]:
         violation = SafetyViolation(
@@ -173,21 +205,13 @@ def authorize(
         )
 
     allowed = violation is None
-    
+
     if allowed:
-        logger.info(f"Action '{payload.action.type}' complies with policy rules. Submitting intent hash to Solana Receipt service...")
+        logger.info(f"Action '{payload.action.type}' complies with policy rules. Submitting intent hash to Solana receipt service...")
     else:
         logger.warning(f"Action blocked by policy rules: {violation.explanation}")
 
-    receipt = receipt_service.anchor(
-        {
-            "policy_id": payload.policy_id,
-            "requester": payload.requester,
-            "action": payload.action.model_dump(),
-            "reasoning_trace": payload.reasoning_trace,
-            "allowed": allowed,
-        }
-    )
+    receipt = receipt_service.anchor({**verification_payload, "allowed": allowed})
 
     receipt_status = ReceiptStatus(receipt.status)
     decision = AuthorizationDecision(
@@ -241,7 +265,7 @@ def authorize(
 def list_audits(
     policy_id: str,
     status_filter: str | None = Query(default=None, alias="status"),
-    created_after: str | None = Query(default=None),
+    created_after: datetime | None = Query(default=None),
     db: Session = Depends(get_db)
 ):
     store = DatabaseStore(db)
