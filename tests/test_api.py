@@ -120,6 +120,118 @@ def test_authorize_allows_valid_request():
     assert body["receipt_signature"].startswith("mock_")
 
 
+def test_cross_agent_proof_can_be_verified_by_target_service():
+    response = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Cross agent trust policy",
+            "rules": {
+                "allowed_http_methods": ["POST"],
+                "trusted_origins": ["agent-router"],
+                "trusted_executors": ["billing-api"],
+                "requires_proof_for_external_execution": True,
+                "proof_ttl_seconds": 600,
+            },
+        },
+    )
+    policy_id = response.json()["id"]
+
+    authorize_payload = {
+        "policy_id": policy_id,
+        "requester": "agent://planner",
+        "origin_service": "agent-router",
+        "agent_wallet": "wallet_agent_123",
+        "action": {
+            "type": "submit_payment",
+            "http_method": "POST",
+            "resource": "/payments",
+            "target_service": "billing-api",
+            "amount_usd": 100,
+        },
+        "reasoning_trace": "Delegate payment execution to billing-api with a verifiable proof.",
+    }
+
+    authorize = client.post(
+        "/v1/authorize",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json=authorize_payload,
+    )
+
+    assert authorize.status_code == 200
+    proof = authorize.json()["proof"]
+    assert proof["target_service"] == "billing-api"
+    assert proof["signature"].startswith("mockproof_")
+
+    verify = client.post(
+        "/v1/proofs/verify",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "verifier": "billing-api",
+            "action": authorize_payload["action"],
+            "proof": proof,
+        },
+    )
+
+    assert verify.status_code == 200
+    assert verify.json()["valid"] is True
+    assert verify.json()["reason"] == "verified"
+
+
+def test_cross_agent_proof_rejects_wrong_verifier():
+    response = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Cross agent verifier policy",
+            "rules": {
+                "allowed_http_methods": ["POST"],
+                "trusted_origins": ["agent-router"],
+                "trusted_executors": ["billing-api"],
+                "requires_proof_for_external_execution": True,
+            },
+        },
+    )
+    policy_id = response.json()["id"]
+
+    authorize = client.post(
+        "/v1/authorize",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "policy_id": policy_id,
+            "requester": "agent://planner",
+            "origin_service": "agent-router",
+            "action": {
+                "type": "submit_payment",
+                "http_method": "POST",
+                "resource": "/payments",
+                "target_service": "billing-api",
+            },
+            "reasoning_trace": "Delegate payment execution to billing-api with a verifiable proof.",
+        },
+    )
+
+    proof = authorize.json()["proof"]
+    verify = client.post(
+        "/v1/proofs/verify",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "verifier": "inventory-api",
+            "action": {
+                "type": "submit_payment",
+                "http_method": "POST",
+                "resource": "/payments",
+                "target_service": "billing-api",
+            },
+            "proof": proof,
+        },
+    )
+
+    assert verify.status_code == 200
+    assert verify.json()["valid"] is False
+    assert verify.json()["reason"] == "verifier_not_authorized"
+
+
 def test_high_risk_action_requires_verified_signature():
     policy_id = client.post(
         "/v1/policies",

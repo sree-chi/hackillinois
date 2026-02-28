@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from solana.rpc.api import Client
@@ -36,6 +37,8 @@ class SolanaReceiptService:
         self.mode = os.getenv("SOLANA_RECEIPT_MODE", "mock").lower()
         self.rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
         self.client = Client(self.rpc_url)
+        self.mock_signing_secret = os.getenv("SOLANA_PROOF_SECRET", "sentinel-proof-secret")
+        self.mock_issuer = os.getenv("SOLANA_PROOF_ISSUER", "sentinel-mock-issuer")
 
         pk_env = os.getenv("SOLANA_PRIVATE_KEY")
         if pk_env:
@@ -47,15 +50,56 @@ class SolanaReceiptService:
         else:
             self.keypair = None
 
+    def issuer(self) -> str:
+        if self.keypair:
+            return str(self.keypair.pubkey())
+        return self.mock_issuer
+
     def _intent_hash(self, payload: dict[str, Any]) -> str:
         canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+
+    def _normalize_payload(self, payload: Any) -> Any:
+        if isinstance(payload, dict):
+            return {key: self._normalize_payload(value) for key, value in payload.items()}
+        if isinstance(payload, list):
+            return [self._normalize_payload(item) for item in payload]
+        if isinstance(payload, datetime):
+            value = payload
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return payload
+
+    def _proof_signature(self, payload: dict[str, Any]) -> str:
+        canonical_payload = json.dumps(
+            self._normalize_payload(payload),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        if self.mode == "live" and self.keypair:
+            return str(self.keypair.sign_message(canonical_payload.encode("utf-8")))
+        digest = hashlib.sha256(f"{self.mock_signing_secret}:{canonical_payload}".encode("utf-8")).hexdigest()
+        return f"mockproof_{digest}"
 
     def build_mock_payment_token(self, payload: dict[str, Any]) -> str:
         serialized_payload = json.dumps(payload, separators=(",", ":"))
         encoded = base64.b64encode(serialized_payload.encode("utf-8")).decode("ascii")
         token_body = "".join(ch for ch in encoded if ch.isalnum())[:24]
         return f"mock_x402_{token_body}"
+
+    def action_hash(self, payload: dict[str, Any]) -> str:
+        return self._intent_hash(payload)
+
+    def build_authorization_proof(self, claims: dict[str, Any]) -> dict[str, Any]:
+        proof_claims = {**claims, "issuer": self.issuer()}
+        proof_claims["signature"] = self._proof_signature(proof_claims)
+        return proof_claims
+
+    def verify_authorization_proof(self, claims: dict[str, Any], signature: str) -> bool:
+        unsigned_claims = {key: value for key, value in claims.items() if key != "signature"}
+        expected = self._proof_signature(unsigned_claims)
+        return expected == signature
 
     def verify_high_risk_signature(self, signature: str | None, payload: dict[str, Any]) -> bool:
         if not signature:

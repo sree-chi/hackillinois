@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,12 +14,17 @@ from src.database import Base, engine, get_db
 from src.models import (
     AuditRecord,
     AuditStatus,
+    AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
     CreatePolicyRequest,
     ErrorEnvelope,
     ReceiptStatus,
     SafetyViolation,
+    VerifyProofRequest,
+    VerifyProofResult,
+    expires_at,
+    new_id,
 )
 from src.solana import SolanaVerificationError, receipt_service
 from src.store import DatabaseStore
@@ -149,12 +154,24 @@ def authorize(
     method = payload.action.http_method.upper()
     rules = policy.rules
     violation: SafetyViolation | None = None
+    action_payload = payload.action.model_dump()
+    payment_verification_payload = payload.model_dump()
     verification_payload = {
         "policy_id": payload.policy_id,
+        "policy_hash": policy.policy_hash,
         "requester": payload.requester,
-        "action": payload.action.model_dump(),
+        "origin_service": payload.origin_service,
+        "agent_wallet": payload.agent_wallet,
+        "action": action_payload,
         "reasoning_trace": payload.reasoning_trace,
     }
+    action_hash = receipt_service.action_hash({
+        "policy_id": payload.policy_id,
+        "policy_hash": policy.policy_hash,
+        "origin_service": payload.origin_service,
+        "agent_wallet": payload.agent_wallet,
+        "action": action_payload,
+    })
 
     is_high_risk = (payload.action.amount_usd or 0) >= HIGH_RISK_AMOUNT_USD
     if is_high_risk:
@@ -162,7 +179,7 @@ def authorize(
             f"High-risk action detected (amount: ${payload.action.amount_usd}). Verifying x402 payment signature..."
         )
         try:
-            verified = receipt_service.verify_high_risk_signature(x_solana_tx_signature, verification_payload)
+            verified = receipt_service.verify_high_risk_signature(x_solana_tx_signature, payment_verification_payload)
         except SolanaVerificationError as exc:
             logger.exception("x402 verification failed due to Solana verification error")
             raise error_response(
@@ -191,6 +208,26 @@ def authorize(
             severity="medium",
             explanation=f"HTTP method {method} is not allowed by this policy.",
         )
+    elif rules.trusted_origins and payload.origin_service not in rules.trusted_origins:
+        violation = SafetyViolation(
+            category="origin_not_trusted",
+            severity="high",
+            explanation="This origin service is not trusted to request cross-agent execution under the policy.",
+        )
+    elif not payload.action.target_service and (
+        rules.requires_proof_for_external_execution or rules.trusted_executors
+    ):
+        violation = SafetyViolation(
+            category="proof_target_missing",
+            severity="medium",
+            explanation="A target service is required when the policy issues external execution proofs.",
+        )
+    elif rules.trusted_executors and payload.action.target_service not in rules.trusted_executors:
+        violation = SafetyViolation(
+            category="executor_not_trusted",
+            severity="high",
+            explanation="This target service is not trusted to execute actions under the policy.",
+        )
     elif rules.max_spend_usd is not None and (payload.action.amount_usd or 0) > rules.max_spend_usd:
         violation = SafetyViolation(
             category="spend_limit_exceeded",
@@ -214,12 +251,35 @@ def authorize(
     receipt = receipt_service.anchor({**verification_payload, "allowed": allowed})
 
     receipt_status = ReceiptStatus(receipt.status)
+    proof: AuthorizationProof | None = None
+    if allowed and (rules.requires_proof_for_external_execution or payload.action.target_service):
+        proof_id = new_id("prf")
+        proof_claims = receipt_service.build_authorization_proof({
+            "proof_id": proof_id,
+            "schema_version": "sentinel-proof/v1",
+            "policy_id": payload.policy_id,
+            "policy_hash": policy.policy_hash,
+            "action_hash": action_hash,
+            "requester": payload.requester,
+            "agent_wallet": payload.agent_wallet,
+            "origin_service": payload.origin_service,
+            "target_service": payload.action.target_service,
+            "receipt_signature": receipt.signature,
+            "issued_at": datetime.now(timezone.utc),
+            "expires_at": expires_at(rules.proof_ttl_seconds),
+        })
+        proof = AuthorizationProof.model_validate(proof_claims)
+        store.create_proof(proof)
+
     decision = AuthorizationDecision(
         policy_id=payload.policy_id,
+        policy_hash=policy.policy_hash,
+        action_hash=action_hash,
         allowed=allowed,
         decision="allow" if allowed else "deny",
         receipt_status=receipt_status,
         receipt_signature=receipt.signature,
+        proof=proof,
         violation=violation,
     )
 
@@ -228,10 +288,16 @@ def authorize(
         request_id=decision.request_id,
         status=AuditStatus.allowed if allowed else AuditStatus.blocked,
         requester=payload.requester,
+        origin_service=payload.origin_service,
+        target_service=payload.action.target_service,
+        agent_wallet=payload.agent_wallet,
         action_type=payload.action.type,
         http_method=method,
         resource=payload.action.resource,
         amount_usd=payload.action.amount_usd,
+        action_hash=action_hash,
+        policy_hash=policy.policy_hash,
+        proof_id=proof.proof_id if proof else None,
         receipt_status=decision.receipt_status,
         receipt_signature=decision.receipt_signature,
         violation=violation,
@@ -245,6 +311,9 @@ def authorize(
                 "method_not_allowed": "POLICY_ACTION_NOT_ALLOWED",
                 "spend_limit_exceeded": "POLICY_LIMIT_EXCEEDED",
                 "human_approval_required": "POLICY_REQUIRES_HUMAN_APPROVAL",
+                "origin_not_trusted": "POLICY_ORIGIN_NOT_TRUSTED",
+                "executor_not_trusted": "POLICY_EXECUTOR_NOT_TRUSTED",
+                "proof_target_missing": "POLICY_PROOF_TARGET_REQUIRED",
             }[violation.category],
             message=violation.explanation,
             request_id=decision.request_id,
@@ -252,6 +321,7 @@ def authorize(
             details={
                 "action_type": payload.action.type,
                 "resource": payload.action.resource,
+                "action_hash": action_hash,
                 "receipt_status": decision.receipt_status.value,
                 "receipt_signature": decision.receipt_signature,
                 "safety_violation": violation.model_dump(),
@@ -259,6 +329,131 @@ def authorize(
         )
 
     return decision
+
+
+@app.post("/v1/proofs/verify", dependencies=[Depends(verify_api_key)])
+def verify_proof(payload: VerifyProofRequest, db: Session = Depends(get_db)):
+    store = DatabaseStore(db)
+    stored_proof = store.get_proof(payload.proof.proof_id)
+    if not stored_proof:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="PROOF_NOT_FOUND",
+            message="The requested authorization proof does not exist.",
+            policy_id=payload.proof.policy_id,
+        )
+
+    stored_claims = {
+        "proof_id": stored_proof.proof_id,
+        "schema_version": stored_proof.schema_version,
+        "policy_id": stored_proof.policy_id,
+        "policy_hash": stored_proof.policy_hash,
+        "action_hash": stored_proof.action_hash,
+        "requester": stored_proof.requester,
+        "agent_wallet": stored_proof.agent_wallet,
+        "origin_service": stored_proof.origin_service,
+        "target_service": stored_proof.target_service,
+        "issuer": stored_proof.issuer,
+        "receipt_signature": stored_proof.receipt_signature,
+        "signature": stored_proof.signature,
+    }
+    provided_claims = {
+        "proof_id": payload.proof.proof_id,
+        "schema_version": payload.proof.schema_version,
+        "policy_id": payload.proof.policy_id,
+        "policy_hash": payload.proof.policy_hash,
+        "action_hash": payload.proof.action_hash,
+        "requester": payload.proof.requester,
+        "agent_wallet": payload.proof.agent_wallet,
+        "origin_service": payload.proof.origin_service,
+        "target_service": payload.proof.target_service,
+        "issuer": payload.proof.issuer,
+        "receipt_signature": payload.proof.receipt_signature,
+        "signature": payload.proof.signature,
+    }
+    if stored_claims != provided_claims:
+        raise error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="PROOF_MISMATCH",
+            message="The provided authorization proof does not match the stored record.",
+            policy_id=payload.proof.policy_id,
+        )
+
+    action_hash = receipt_service.action_hash({
+        "policy_id": payload.proof.policy_id,
+        "policy_hash": payload.proof.policy_hash,
+        "origin_service": payload.proof.origin_service,
+        "agent_wallet": payload.proof.agent_wallet,
+        "action": payload.action.model_dump(),
+    })
+
+    if payload.verifier != payload.proof.target_service:
+        return VerifyProofResult(
+            valid=False,
+            reason="verifier_not_authorized",
+            policy_id=payload.proof.policy_id,
+            policy_hash=payload.proof.policy_hash,
+            action_hash=action_hash,
+            verifier=payload.verifier,
+            proof_id=payload.proof.proof_id,
+            expires_at=payload.proof.expires_at,
+            receipt_signature=payload.proof.receipt_signature,
+        )
+
+    if action_hash != payload.proof.action_hash:
+        return VerifyProofResult(
+            valid=False,
+            reason="action_mismatch",
+            policy_id=payload.proof.policy_id,
+            policy_hash=payload.proof.policy_hash,
+            action_hash=action_hash,
+            verifier=payload.verifier,
+            proof_id=payload.proof.proof_id,
+            expires_at=payload.proof.expires_at,
+            receipt_signature=payload.proof.receipt_signature,
+        )
+
+    proof_expires_at = payload.proof.expires_at
+    if proof_expires_at.tzinfo is None:
+        proof_expires_at = proof_expires_at.replace(tzinfo=timezone.utc)
+
+    if proof_expires_at <= datetime.now(timezone.utc):
+        return VerifyProofResult(
+            valid=False,
+            reason="proof_expired",
+            policy_id=payload.proof.policy_id,
+            policy_hash=payload.proof.policy_hash,
+            action_hash=action_hash,
+            verifier=payload.verifier,
+            proof_id=payload.proof.proof_id,
+            expires_at=proof_expires_at,
+            receipt_signature=payload.proof.receipt_signature,
+        )
+
+    if not receipt_service.verify_authorization_proof(payload.proof.model_dump(), payload.proof.signature):
+        return VerifyProofResult(
+            valid=False,
+            reason="invalid_signature",
+            policy_id=payload.proof.policy_id,
+            policy_hash=payload.proof.policy_hash,
+            action_hash=action_hash,
+            verifier=payload.verifier,
+            proof_id=payload.proof.proof_id,
+            expires_at=proof_expires_at,
+            receipt_signature=payload.proof.receipt_signature,
+        )
+
+    return VerifyProofResult(
+        valid=True,
+        reason="verified",
+        policy_id=payload.proof.policy_id,
+        policy_hash=payload.proof.policy_hash,
+        action_hash=action_hash,
+        verifier=payload.verifier,
+        proof_id=payload.proof.proof_id,
+        expires_at=proof_expires_at,
+        receipt_signature=payload.proof.receipt_signature,
+    )
 
 
 @app.get("/v1/audits/{policy_id}", dependencies=[Depends(verify_api_key)])
