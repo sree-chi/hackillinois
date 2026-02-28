@@ -96,7 +96,7 @@ async def verify_api_key(
 
     store = DatabaseStore(db)
     client = store.get_api_client_by_hash(hash_api_key(candidate))
-    if client and client.revoked_at is None:
+    if client and client.revoked_at is None and client.suspended_at is None:
         store.mark_api_client_used(client.client_id)
         return candidate
 

@@ -261,20 +261,39 @@ function renderApiKeys(apiKeys) {
                     <p class="activity-meta">${entry.owner_email} | Created ${new Date(entry.created_at).toLocaleString()}</p>
                 </div>
                 <div class="action-row">
-                    <span class="status-pill ${entry.revoked_at ? "status-danger" : "status-success"}">${entry.revoked_at ? "revoked" : "active"}</span>
+                    <span class="status-pill ${entry.revoked_at ? "status-danger" : entry.suspended_at ? "status-warning" : "status-success"}">
+                        ${entry.revoked_at ? "revoked" : entry.suspended_at ? "suspended" : "active"}
+                    </span>
+                    <button
+                        class="btn btn-ghost"
+                        type="button"
+                        data-suspend-key="${entry.client_id}"
+                        ${entry.revoked_at || entry.suspended_at ? "disabled" : ""}
+                    >
+                        Temp remove
+                    </button>
+                    <button
+                        class="btn btn-ghost"
+                        type="button"
+                        data-restore-key="${entry.client_id}"
+                        ${entry.revoked_at || !entry.suspended_at ? "disabled" : ""}
+                    >
+                        Restore
+                    </button>
                     <button
                         class="btn btn-ghost"
                         type="button"
                         data-revoke-key="${entry.client_id}"
                         ${entry.revoked_at ? "disabled" : ""}
                     >
-                        Delete
+                        Permanent
                     </button>
                 </div>
             </div>
             <p class="activity-message">
                 Prefix ${entry.api_key_prefix}
                 ${entry.last_used_at ? ` | Last used ${new Date(entry.last_used_at).toLocaleString()}` : " | Not used yet"}
+                ${entry.suspended_at ? ` | Suspended ${new Date(entry.suspended_at).toLocaleString()}` : ""}
                 ${entry.revoked_at ? ` | Revoked ${new Date(entry.revoked_at).toLocaleString()}` : ""}
             </p>
         </article>
@@ -458,16 +477,25 @@ walletList.addEventListener("click", async (event) => {
 });
 
 apiKeyList.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-revoke-key]");
+    const suspendButton = event.target.closest("[data-suspend-key]");
+    const restoreButton = event.target.closest("[data-restore-key]");
+    const revokeButton = event.target.closest("[data-revoke-key]");
+    const button = suspendButton || restoreButton || revokeButton;
     if (!button || !currentSessionToken) {
         return;
     }
 
-    const clientId = button.dataset.revokeKey;
+    const clientId = button.dataset.suspendKey || button.dataset.restoreKey || button.dataset.revokeKey;
+    const path = button.dataset.suspendKey
+        ? `/v1/accounts/me/keys/${clientId}/suspend`
+        : button.dataset.restoreKey
+            ? `/v1/accounts/me/keys/${clientId}/restore`
+            : `/v1/accounts/me/keys/${clientId}`;
+    const method = button.dataset.revokeKey ? "DELETE" : "POST";
     button.disabled = true;
     try {
-        const response = await fetch(`${API_BASE}/v1/accounts/me/keys/${clientId}`, {
-            method: "DELETE",
+        const response = await fetch(`${API_BASE}${path}`, {
+            method,
             headers: {
                 Authorization: `Bearer ${currentSessionToken}`,
             },
@@ -478,19 +506,32 @@ apiKeyList.addEventListener("click", async (event) => {
         }
 
         if (currentApiKey && currentIssuedClientId === clientId) {
-            currentApiKey = "";
-            currentIssuedClientId = "";
-            localStorage.removeItem(STORAGE_KEYS.apiKey);
-            issuedKey.textContent = "Key deleted.";
-            issuedKeyMeta.textContent = "The selected API key was revoked.";
+            if (button.dataset.revokeKey) {
+                currentApiKey = "";
+                currentIssuedClientId = "";
+                localStorage.removeItem(STORAGE_KEYS.apiKey);
+                issuedKey.textContent = "Key deleted.";
+                issuedKeyMeta.textContent = "The selected API key was permanently revoked.";
+            } else if (button.dataset.suspendKey) {
+                issuedKeyMeta.textContent = "The selected API key is temporarily disabled.";
+            } else if (button.dataset.restoreKey) {
+                issuedKeyMeta.textContent = "The selected API key is active again.";
+            }
         }
         updateSnippets();
         updateDashboardState();
         await fetchDashboard();
-        log(`Deleted API key ${clientId}`, "success");
+        log(
+            button.dataset.suspendKey
+                ? `Temporarily disabled API key ${clientId}`
+                : button.dataset.restoreKey
+                    ? `Restored API key ${clientId}`
+                    : `Permanently revoked API key ${clientId}`,
+            "success"
+        );
     } catch (error) {
         button.disabled = false;
-        log(`API key deletion failed: ${error.message}`, "error");
+        log(`API key update failed: ${error.message}`, "error");
     }
 });
 

@@ -104,6 +104,17 @@ def ensure_runtime_schema_compatibility() -> None:
             statements.append("ALTER TABLE policies ADD COLUMN idempotency_key VARCHAR")
 
     if not statements:
+        pass
+
+    if "api_clients" in table_names:
+        api_client_columns = {column["name"] for column in inspector.get_columns("api_clients")}
+        if "suspended_at" not in api_client_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP WITH TIME ZONE")
+            else:
+                statements.append("ALTER TABLE api_clients ADD COLUMN suspended_at DATETIME")
+
+    if not statements:
         return
 
     with engine.begin() as connection:
@@ -493,6 +504,48 @@ def delete_account_api_key(
         "status": "success",
         "client_id": client.client_id,
         "revoked_at": client.revoked_at,
+    }
+
+
+@app.post("/v1/accounts/me/keys/{client_id}/suspend", status_code=status.HTTP_200_OK)
+def suspend_account_api_key(
+    client_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    client = store.suspend_api_client_for_account(account.account_id, client_id)
+    if not client:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="API_KEY_NOT_FOUND",
+            message="The requested active API key does not exist for this account.",
+        )
+    return {
+        "status": "success",
+        "client_id": client.client_id,
+        "suspended_at": client.suspended_at,
+    }
+
+
+@app.post("/v1/accounts/me/keys/{client_id}/restore", status_code=status.HTTP_200_OK)
+def restore_account_api_key(
+    client_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    client = store.restore_api_client_for_account(account.account_id, client_id)
+    if not client:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="API_KEY_NOT_FOUND",
+            message="The requested restorable API key does not exist for this account.",
+        )
+    return {
+        "status": "success",
+        "client_id": client.client_id,
+        "suspended_at": client.suspended_at,
     }
 
 

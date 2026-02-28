@@ -225,6 +225,7 @@ class ApiClientRecord(BaseModel):
     api_key_prefix: str
     created_at: datetime = Field(default_factory=utc_now)
     last_used_at: datetime | None = None
+    suspended_at: datetime | None = None
     revoked_at: datetime | None = None
 
 
@@ -335,6 +336,7 @@ class AccountApiKeySummary(BaseModel):
     api_key_prefix: str
     created_at: datetime
     last_used_at: datetime | None = None
+    suspended_at: datetime | None = None
     revoked_at: datetime | None = None
 
 

@@ -174,6 +174,64 @@ def test_account_can_revoke_its_api_key():
     assert denied.status_code == 401
 
 
+def test_account_can_suspend_and_restore_api_key():
+    session_token = create_account_session()
+    issue = client.post(
+        "/v1/developer/keys",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "app_name": "Suspendable App",
+            "owner_name": "Portal Owner",
+        },
+    )
+    assert issue.status_code == 201
+    issued = issue.json()
+
+    suspend = client.post(
+        f"/v1/accounts/me/keys/{issued['client_id']}/suspend",
+        headers={"Authorization": f"Bearer {session_token}"},
+    )
+    assert suspend.status_code == 200
+    assert suspend.json()["client_id"] == issued["client_id"]
+    assert suspend.json()["suspended_at"] is not None
+
+    dashboard_after_suspend = client.get(
+        "/v1/accounts/me/dashboard",
+        headers={"Authorization": f"Bearer {session_token}"},
+    )
+    assert dashboard_after_suspend.status_code == 200
+    assert dashboard_after_suspend.json()["api_keys"][0]["suspended_at"] is not None
+    assert dashboard_after_suspend.json()["api_keys"][0]["revoked_at"] is None
+
+    denied_while_suspended = client.post(
+        "/v1/policies",
+        headers={"Authorization": f"Bearer {issued['api_key']}"},
+        json={
+            "name": "Should fail while suspended",
+            "rules": {"allowed_http_methods": ["GET"]},
+        },
+    )
+    assert denied_while_suspended.status_code == 401
+
+    restore = client.post(
+        f"/v1/accounts/me/keys/{issued['client_id']}/restore",
+        headers={"Authorization": f"Bearer {session_token}"},
+    )
+    assert restore.status_code == 200
+    assert restore.json()["client_id"] == issued["client_id"]
+    assert restore.json()["suspended_at"] is None
+
+    allowed_again = client.post(
+        "/v1/policies",
+        headers={"Authorization": f"Bearer {issued['api_key']}"},
+        json={
+            "name": "Works again",
+            "rules": {"allowed_http_methods": ["GET"]},
+        },
+    )
+    assert allowed_again.status_code == 201
+
+
 def test_can_link_wallet_to_account_and_fetch_overview():
     session_token = create_account_session()
     keypair = Keypair()

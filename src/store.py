@@ -261,6 +261,7 @@ class DatabaseStore:
                 api_key_prefix=row.api_key_prefix,
                 created_at=row.created_at,
                 last_used_at=row.last_used_at,
+                suspended_at=row.suspended_at,
                 revoked_at=row.revoked_at,
             )
             for row in rows
@@ -295,6 +296,43 @@ class DatabaseStore:
             return None
         if row.revoked_at is None:
             row.revoked_at = datetime.now(timezone.utc)
+            row.suspended_at = row.suspended_at or row.revoked_at
+            self.db.commit()
+            self.db.refresh(row)
+        return ApiClientRecord.model_validate(row)
+
+    def suspend_api_client_for_account(self, account_id: str, client_id: str) -> ApiClientRecord | None:
+        row = (
+            self.db.query(ApiClientModel)
+            .join(AccountApiClientModel, AccountApiClientModel.client_id == ApiClientModel.client_id)
+            .filter(
+                AccountApiClientModel.account_id == account_id,
+                ApiClientModel.client_id == client_id,
+            )
+            .first()
+        )
+        if not row or row.revoked_at is not None:
+            return None
+        if row.suspended_at is None:
+            row.suspended_at = datetime.now(timezone.utc)
+            self.db.commit()
+            self.db.refresh(row)
+        return ApiClientRecord.model_validate(row)
+
+    def restore_api_client_for_account(self, account_id: str, client_id: str) -> ApiClientRecord | None:
+        row = (
+            self.db.query(ApiClientModel)
+            .join(AccountApiClientModel, AccountApiClientModel.client_id == ApiClientModel.client_id)
+            .filter(
+                AccountApiClientModel.account_id == account_id,
+                ApiClientModel.client_id == client_id,
+            )
+            .first()
+        )
+        if not row or row.revoked_at is not None:
+            return None
+        if row.suspended_at is not None:
+            row.suspended_at = None
             self.db.commit()
             self.db.refresh(row)
         return ApiClientRecord.model_validate(row)
