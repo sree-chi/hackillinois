@@ -3,64 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel-Auth Demo</title>
+    <title>Sentinel Auth Developer Portal</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="glow-bg"></div>
-
-    <main class="container">
-        <header>
-            <h1>Sentinel-Auth <span>The Policy-Gated API Proxy</span></h1>
-            <p>Agentic intent verification backed by Solana's lightning-fast Alpenglow finality.</p>
-        </header>
-
-        <div class="dashboard">
-            <!-- Left Side: Actions -->
-            <section class="panel actions-panel">
-                <h2>Agent Actions</h2>
-                <p class="subtitle">Simulate AI Agent API Calls</p>
-
-                <div class="action-card">
-                    <h3>1. Create AI Safety Policy</h3>
-                    <p>Enforce strict API rules (e.g. Max Spend: $5,000).</p>
-                    <button id="btn-create-policy" class="btn primary">Deploy Policy</button>
-                    <div id="policy-status" class="status-indicator"></div>
-                </div>
-
-                <div class="action-card">
-                    <h3>2. Safe Action (Low Risk)</h3>
-                    <p>Request: $500 Wire Transfer. Within limits.</p>
-                    <button id="btn-safe-action" class="btn secondary" disabled>Execute $500 Transfer</button>
-                </div>
-
-                <div class="action-card warning">
-                    <h3>3. High-Risk Action (x402 Trigger)</h3>
-                    <p>Request: $2000 Wire Transfer. Triggers x402 Payment Required.</p>
-                    <button id="btn-high-risk" class="btn secondary" disabled>Execute $2000 Transfer</button>
-                </div>
-
-                <div class="action-card success">
-                    <h3>4. x402 Solana Unlock</h3>
-                    <p>Agent signs a transaction to pay for the $2000 intent audit.</p>
-                    <button id="btn-unlock" class="btn solana" disabled>Sign & Execute Transfer</button>
+    <div class="page-shell">
+        <main class="layout">
+            <section class="hero panel">
+                <p class="eyebrow">Public API For AI Agent Control</p>
+                <h1>Issue a key, wire your agent, and route every risky action through policy checks.</h1>
+                <p class="hero-copy">
+                    Sentinel Auth is a developer-facing policy gateway for AI agents. Generate a key from this page,
+                    create a starter policy, and test a live authorization request without editing environment variables.
+                </p>
+                <div class="hero-meta">
+                    <div>
+                        <span class="meta-label">Base URL</span>
+                        <code id="api-base-label">Loading...</code>
+                    </div>
+                    <div>
+                        <span class="meta-label">Docs</span>
+                        <a id="docs-link" href="/docs" target="_blank" rel="noreferrer">Open API docs</a>
+                    </div>
+                    <div>
+                        <span class="meta-label">Status</span>
+                        <strong id="api-status">Checking...</strong>
+                    </div>
                 </div>
             </section>
 
-            <!-- Right Side: Live Logs -->
-            <section class="panel console-panel">
-                <div class="console-header">
-                    <h2>Live Audit Console</h2>
-                    <span class="pulse"></span>
-                </div>
-                <div class="console-window" id="console-output">
-                    <!-- Logs go here -->
-                </div>
-            </section>
-        </div>
-    </main>
+            <section class="grid">
+                <section class="panel">
+                    <div class="section-heading">
+                        <p class="eyebrow">Step 1</p>
+                        <h2>Get a developer key</h2>
+                    </div>
 
-    <script src="app.js"></script>
+                    <form id="issue-key-form" class="stack">
+                        <label>
+                            <span>App name</span>
+                            <input id="app-name" name="app_name" type="text" placeholder="Atlas Agent Ops" required>
+                        </label>
+                        <label>
+                            <span>Owner email</span>
+                            <input id="owner-email" name="owner_email" type="email" placeholder="team@example.com" required>
+                        </label>
+                        <label>
+                            <span>Owner name</span>
+                            <input id="owner-name" name="owner_name" type="text" placeholder="Optional">
+                        </label>
+                        <label>
+                            <span>Use case</span>
+                            <textarea id="use-case" name="use_case" rows="4" placeholder="Describe what your AI agents will manage."></textarea>
+                        </label>
+                        <button id="issue-key-button" class="btn btn-primary" type="submit">Issue API key</button>
+                    </form>
+
+                    <div class="output-card">
+                        <div class="output-header">
+                            <h3>Issued key</h3>
+                            <button id="copy-key-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                        </div>
+                        <code id="issued-key">No key issued yet.</code>
+                        <p id="issued-key-meta" class="muted">The plaintext key is only returned when it is created.</p>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <p class="eyebrow">Step 2</p>
+                        <h2>Quickstart</h2>
+                    </div>
+
+                    <div class="snippet-group">
+                        <div class="snippet-header">
+                            <h3>cURL</h3>
+                            <button id="copy-curl-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                        </div>
+                        <pre id="curl-snippet" class="snippet">Issue a key to generate a ready-to-run cURL example.</pre>
+                    </div>
+
+                    <div class="snippet-group">
+                        <div class="snippet-header">
+                            <h3>JavaScript</h3>
+                            <button id="copy-js-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                        </div>
+                        <pre id="js-snippet" class="snippet">Issue a key to generate a browser/server example.</pre>
+                    </div>
+                </section>
+            </section>
+
+            <section class="grid">
+                <section class="panel">
+                    <div class="section-heading">
+                        <p class="eyebrow">Step 3</p>
+                        <h2>Test your key</h2>
+                    </div>
+                    <p class="muted">
+                        This creates a starter policy and submits a sample AI action through <code>/v1/authorize</code>.
+                    </p>
+                    <div class="action-row">
+                        <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create starter policy</button>
+                        <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample authorize</button>
+                    </div>
+                    <div class="output-card">
+                        <h3>Current policy</h3>
+                        <code id="policy-id-label">No policy created yet.</code>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <p class="eyebrow">Live Log</p>
+                        <h2>Portal console</h2>
+                    </div>
+                    <div id="console-output" class="console"></div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
 </body>
 </html>

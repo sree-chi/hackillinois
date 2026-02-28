@@ -1,14 +1,15 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from src.database import Base, get_db
 from src.main import app
-from src.database import get_db, Base
 from src.solana import receipt_service
 
-# Setup in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
@@ -18,6 +19,7 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def override_get_db():
     try:
         db = TestingSessionLocal()
@@ -25,25 +27,20 @@ def override_get_db():
     finally:
         db.close()
 
+
 app.dependency_overrides[get_db] = override_get_db
 
-# Ensure Solana service is in mock mode for testing to avoid needing a real keypair/network
-import os
 os.environ["SOLANA_RECEIPT_MODE"] = "mock"
 receipt_service.mode = "mock"
 
 client = TestClient(app)
-
-# Run create_all before each test, not just once globally, to ensure a clean state if needed,
-# but for these simple tests, doing it once per module is fine.
 Base.metadata.create_all(bind=engine)
+
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown():
-    # Setup
     Base.metadata.create_all(bind=engine)
     yield
-    # Teardown
     Base.metadata.drop_all(bind=engine)
 
 
@@ -66,6 +63,52 @@ def create_default_policy() -> str:
     )
     assert response.status_code == 201
     return response.json()["id"]
+
+
+def issue_public_key() -> str:
+    response = client.post(
+        "/v1/developer/keys",
+        json={
+            "app_name": "Portal Test App",
+            "owner_name": "Portal Owner",
+            "owner_email": "owner@example.com",
+            "use_case": "Testing public onboarding",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["api_key"]
+
+
+def test_public_key_issuance_returns_live_key_material():
+    response = client.post(
+        "/v1/developer/keys",
+        json={
+            "app_name": "Public Portal App",
+            "owner_email": "founder@example.com",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["api_key"].startswith("ska_live_")
+    assert body["authorization_header"].startswith("Bearer ska_live_")
+    assert body["docs_url"].endswith("/docs")
+
+
+def test_issued_public_key_can_access_protected_endpoints():
+    api_key = issue_public_key()
+
+    response = client.post(
+        "/v1/policies",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "name": "Public key policy",
+            "rules": {"allowed_http_methods": ["GET"]},
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Public key policy"
 
 
 def test_create_policy_is_idempotent():
@@ -94,10 +137,7 @@ def test_create_policy_is_idempotent():
 
     assert first.status_code == 201
     assert second.status_code == 201
-    # Note: Idempotency is not implemented in our simple DatabaseStore right now, 
-    # so they will have different IDs. This test needs to be adjusted or skipped 
-    # if we haven't implemented DB idempotency. We'll skip the ID check for now.
-    # assert first.json()["id"] == second.json()["id"]
+    assert first.json()["id"] == second.json()["id"]
 
 
 def test_authorize_allows_valid_request():
@@ -124,6 +164,159 @@ def test_authorize_allows_valid_request():
     assert body["allowed"] is True
     assert body["receipt_status"] == "anchored"
     assert body["receipt_signature"].startswith("mock_")
+
+
+def test_cross_agent_proof_can_be_verified_by_target_service():
+    response = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Cross agent trust policy",
+            "rules": {
+                "allowed_http_methods": ["POST"],
+                "trusted_origins": ["agent-router"],
+                "trusted_executors": ["billing-api"],
+                "requires_proof_for_external_execution": True,
+                "proof_ttl_seconds": 600,
+            },
+        },
+    )
+    policy_id = response.json()["id"]
+
+    authorize_payload = {
+        "policy_id": policy_id,
+        "requester": "agent://planner",
+        "origin_service": "agent-router",
+        "agent_wallet": "wallet_agent_123",
+        "action": {
+            "type": "submit_payment",
+            "http_method": "POST",
+            "resource": "/payments",
+            "target_service": "billing-api",
+            "amount_usd": 100,
+        },
+        "reasoning_trace": "Delegate payment execution to billing-api with a verifiable proof.",
+    }
+
+    authorize = client.post(
+        "/v1/authorize",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json=authorize_payload,
+    )
+
+    assert authorize.status_code == 200
+    proof = authorize.json()["proof"]
+    assert proof["target_service"] == "billing-api"
+    assert proof["signature"].startswith("mockproof_")
+
+    verify = client.post(
+        "/v1/proofs/verify",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "verifier": "billing-api",
+            "action": authorize_payload["action"],
+            "proof": proof,
+        },
+    )
+
+    assert verify.status_code == 200
+    assert verify.json()["valid"] is True
+    assert verify.json()["reason"] == "verified"
+
+
+def test_cross_agent_proof_rejects_wrong_verifier():
+    response = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Cross agent verifier policy",
+            "rules": {
+                "allowed_http_methods": ["POST"],
+                "trusted_origins": ["agent-router"],
+                "trusted_executors": ["billing-api"],
+                "requires_proof_for_external_execution": True,
+            },
+        },
+    )
+    policy_id = response.json()["id"]
+
+    authorize = client.post(
+        "/v1/authorize",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "policy_id": policy_id,
+            "requester": "agent://planner",
+            "origin_service": "agent-router",
+            "action": {
+                "type": "submit_payment",
+                "http_method": "POST",
+                "resource": "/payments",
+                "target_service": "billing-api",
+            },
+            "reasoning_trace": "Delegate payment execution to billing-api with a verifiable proof.",
+        },
+    )
+
+    proof = authorize.json()["proof"]
+    verify = client.post(
+        "/v1/proofs/verify",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "verifier": "inventory-api",
+            "action": {
+                "type": "submit_payment",
+                "http_method": "POST",
+                "resource": "/payments",
+                "target_service": "billing-api",
+            },
+            "proof": proof,
+        },
+    )
+
+    assert verify.status_code == 200
+    assert verify.json()["valid"] is False
+    assert verify.json()["reason"] == "verifier_not_authorized"
+
+
+def test_high_risk_action_requires_verified_signature():
+    policy_id = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "High Risk policy",
+            "rules": {"allowed_http_methods": ["POST"], "max_spend_usd": 5000},
+        },
+    ).json()["id"]
+
+    request_body = {
+        "policy_id": policy_id,
+        "requester": "agent://trader",
+        "action": {
+            "type": "wire_transfer",
+            "http_method": "POST",
+            "resource": "/wallets/primary/send",
+            "amount_usd": 2000,
+        },
+        "reasoning_trace": "Transfer inventory budget to settlement wallet.",
+    }
+
+    denied = client.post(
+        "/v1/authorize",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json=request_body,
+    )
+    assert denied.status_code == 402
+
+    verified = client.post(
+        "/v1/authorize",
+        headers={
+            "Authorization": "Bearer default-dev-key",
+            "x-solana-tx-signature": receipt_service.build_mock_payment_token(request_body),
+        },
+        json=request_body,
+    )
+    assert verified.status_code == 200
+    assert verified.json()["allowed"] is True
 
 
 def test_authorize_blocks_excessive_spend():

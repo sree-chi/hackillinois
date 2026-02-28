@@ -1,177 +1,251 @@
-const API_BASE = 'http://localhost:8000';
-const AUTH_HEADER = 'Bearer hackillinois_2026_super_secret';
-let currentPolicyId = null;
+const API_BASE = resolveApiBase();
 
-const consoleEl = document.getElementById('console-output');
-const btnCreate = document.getElementById('btn-create-policy');
-const btnSafe = document.getElementById('btn-safe-action');
-const btnHighRisk = document.getElementById('btn-high-risk');
-const btnUnlock = document.getElementById('btn-unlock');
+let currentApiKey = "";
+let currentPolicyId = "";
 
-function log(msg, type = 'info') {
+const docsLink = document.getElementById("docs-link");
+const apiBaseLabel = document.getElementById("api-base-label");
+const apiStatus = document.getElementById("api-status");
+const issueKeyForm = document.getElementById("issue-key-form");
+const issueKeyButton = document.getElementById("issue-key-button");
+const issuedKey = document.getElementById("issued-key");
+const issuedKeyMeta = document.getElementById("issued-key-meta");
+const copyKeyButton = document.getElementById("copy-key-button");
+const copyCurlButton = document.getElementById("copy-curl-button");
+const copyJsButton = document.getElementById("copy-js-button");
+const curlSnippet = document.getElementById("curl-snippet");
+const jsSnippet = document.getElementById("js-snippet");
+const createPolicyButton = document.getElementById("create-policy-button");
+const runAuthorizeButton = document.getElementById("run-authorize-button");
+const policyIdLabel = document.getElementById("policy-id-label");
+const consoleEl = document.getElementById("console-output");
+
+function resolveApiBase() {
+    const { hostname, origin } = window.location;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+    return isLocalhost ? "http://localhost:8000" : `${origin}/server`;
+}
+
+function log(message, type = "info") {
     const time = new Date().toLocaleTimeString();
-    const div = document.createElement('div');
-    div.className = `log-entry log-${type}`;
-    div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
-    consoleEl.appendChild(div);
+    const row = document.createElement("div");
+    row.className = `log-entry log-${type}`;
+    row.innerHTML = `<span class="log-time">[${time}]</span>${message}`;
+    consoleEl.appendChild(row);
     consoleEl.scrollTop = consoleEl.scrollHeight;
 }
 
-btnCreate.addEventListener('click', async () => {
-    log('Setting up Sentinel API connection...', 'info');
-    log('POST /v1/policies [Idempotency-Key: UI-Demo-Token]', 'info');
+async function readApiResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+        return response.json();
+    }
+
+    return { message: await response.text() };
+}
+
+function updateSnippets() {
+    if (!currentApiKey) {
+        curlSnippet.textContent = "Issue a key to generate a ready-to-run cURL example.";
+        jsSnippet.textContent = "Issue a key to generate a browser/server example.";
+        return;
+    }
+
+    curlSnippet.textContent = [
+        `curl -X POST ${API_BASE}/v1/policies \\`,
+        `  -H "Authorization: Bearer ${currentApiKey}" \\`,
+        `  -H "Content-Type: application/json" \\`,
+        "  -d '{",
+        '    "name": "Agent spending policy",',
+        '    "rules": {',
+        '      "allowed_http_methods": ["GET", "POST"],',
+        '      "max_spend_usd": 5000,',
+        '      "max_requests_per_minute": 60',
+        "    }",
+        "  }'",
+    ].join("\n");
+
+    jsSnippet.textContent = [
+        "const res = await fetch(`${API_BASE}/v1/authorize`, {",
+        '  method: "POST",',
+        "  headers: {",
+        `    Authorization: "Bearer ${currentApiKey}",`,
+        '    "Content-Type": "application/json"',
+        "  },",
+        "  body: JSON.stringify({",
+        `    policy_id: "${currentPolicyId || "pol_your_policy_id"}",`,
+        '    requester: "agent://ops-bot",',
+        "    action: {",
+        '      type: "wire_transfer",',
+        '      http_method: "POST",',
+        '      resource: "/wallets/treasury",',
+        "      amount_usd: 250",
+        "    },",
+        '    reasoning_trace: "Routine treasury movement requested by the orchestration agent."',
+        "  })",
+        "});",
+    ].join("\n");
+}
+
+async function copyText(value, button) {
+    await navigator.clipboard.writeText(value);
+    const previous = button.textContent;
+    button.textContent = "Copied";
+    window.setTimeout(() => {
+        button.textContent = previous;
+    }, 1200);
+}
+
+function authHeaders() {
+    return {
+        Authorization: `Bearer ${currentApiKey}`,
+        "Content-Type": "application/json",
+    };
+}
+
+async function loadOverview() {
+    apiBaseLabel.textContent = API_BASE;
+    try {
+        const response = await fetch(`${API_BASE}/v1/public/overview`);
+        const data = await readApiResponse(response);
+        if (!response.ok) {
+            throw new Error(data.message || "Failed to load overview");
+        }
+
+        apiStatus.textContent = data.status;
+        docsLink.href = data.docs_url;
+        docsLink.textContent = data.docs_url;
+        log(`Connected to ${data.name}. Key endpoint: ${data.key_endpoint}`, "success");
+    } catch (error) {
+        apiStatus.textContent = "offline";
+        log(`Portal bootstrap failed: ${error.message}`, "error");
+    }
+}
+
+issueKeyForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    issueKeyButton.disabled = true;
+    log("Requesting a new developer key from /v1/developer/keys ...");
+
+    const payload = {
+        app_name: document.getElementById("app-name").value.trim(),
+        owner_email: document.getElementById("owner-email").value.trim(),
+        owner_name: document.getElementById("owner-name").value.trim() || null,
+        use_case: document.getElementById("use-case").value.trim() || null,
+    };
 
     try {
-        const res = await fetch(`${API_BASE}/v1/policies`, {
-            method: 'POST',
+        const response = await fetch(`${API_BASE}/v1/developer/keys`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const data = await readApiResponse(response);
+
+        if (!response.ok) {
+            throw new Error(JSON.stringify(data));
+        }
+
+        currentApiKey = data.api_key;
+        issuedKey.textContent = data.api_key;
+        issuedKeyMeta.textContent = `Prefix ${data.api_key_prefix} issued for ${data.app_name}. Docs: ${data.docs_url}`;
+        createPolicyButton.disabled = false;
+        copyKeyButton.disabled = false;
+        copyCurlButton.disabled = false;
+        copyJsButton.disabled = false;
+        updateSnippets();
+        log(`Issued key ${data.api_key_prefix} for ${data.owner_email}`, "success");
+    } catch (error) {
+        log(`Key issuance failed: ${error.message}`, "error");
+    } finally {
+        issueKeyButton.disabled = false;
+    }
+});
+
+createPolicyButton.addEventListener("click", async () => {
+    if (!currentApiKey) {
+        return;
+    }
+
+    createPolicyButton.disabled = true;
+    log("Creating starter policy with the issued key ...");
+
+    try {
+        const response = await fetch(`${API_BASE}/v1/policies`, {
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': AUTH_HEADER,
-                'Idempotency-Key': 'ui-demo-' + Math.random().toString(36).substr(2, 9)
+                ...authHeaders(),
+                "Idempotency-Key": `portal-${Date.now()}`,
             },
             body: JSON.stringify({
-                name: "Agent UI Policy",
-                description: "Approve actions under $5000",
+                name: "Public portal starter policy",
+                description: "Default policy issued from the public developer portal.",
                 rules: {
                     allowed_http_methods: ["GET", "POST"],
                     max_spend_usd: 5000,
-                    max_requests_per_minute: 10
-                }
-            })
+                    max_requests_per_minute: 60,
+                },
+            }),
         });
+        const data = await readApiResponse(response);
 
-        const data = await res.json();
-        if (res.ok) {
-            currentPolicyId = data.id;
-            log(`Success! Created Policy ID: <strong>${currentPolicyId}</strong>`, 'success');
-            btnSafe.disabled = false;
-            btnHighRisk.disabled = false;
-            btnCreate.disabled = true;
-            btnCreate.textContent = "Policy Active";
-        } else {
-            log(`Error: ${JSON.stringify(data)}`, 'error');
+        if (!response.ok) {
+            throw new Error(JSON.stringify(data));
         }
-    } catch (e) {
-        log(`Failed to connect to API: ${e.message}`, 'error');
+
+        currentPolicyId = data.id;
+        policyIdLabel.textContent = currentPolicyId;
+        runAuthorizeButton.disabled = false;
+        updateSnippets();
+        log(`Starter policy created: ${currentPolicyId}`, "success");
+    } catch (error) {
+        log(`Starter policy creation failed: ${error.message}`, "error");
+        createPolicyButton.disabled = false;
     }
 });
 
-btnSafe.addEventListener('click', async () => {
-    log(`Executing Safe Action ($500) for agent...`, 'info');
+runAuthorizeButton.addEventListener("click", async () => {
+    if (!currentApiKey || !currentPolicyId) {
+        return;
+    }
+
+    runAuthorizeButton.disabled = true;
+    log("Submitting sample agent action to /v1/authorize ...");
 
     try {
-        const res = await fetch(`${API_BASE}/v1/authorize`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': AUTH_HEADER
-            },
+        const response = await fetch(`${API_BASE}/v1/authorize`, {
+            method: "POST",
+            headers: authHeaders(),
             body: JSON.stringify({
                 policy_id: currentPolicyId,
-                requester: "agent://ui_demo",
+                requester: "agent://public-portal-demo",
                 action: {
-                    type: "wire_transfer",
+                    type: "knowledge_sync",
                     http_method: "POST",
-                    resource: "/wallets/primary",
-                    amount_usd: 500
+                    resource: "/agents/sync",
+                    amount_usd: 250,
                 },
-                reasoning_trace: "Standard operational transfer of $500."
-            })
+                reasoning_trace: "Sync the managed agent memory after a successful customer support workflow.",
+            }),
         });
+        const data = await readApiResponse(response);
 
-        const data = await res.json();
-        if (res.ok) {
-            log(`Action Approved! Receipt: ${data.receipt_signature}`, 'success');
-        } else {
-            log(`Denied: ${data.detail || JSON.stringify(data)}`, 'error');
+        if (!response.ok) {
+            throw new Error(JSON.stringify(data));
         }
-    } catch (e) {
-        log(`Error: ${e.message}`, 'error');
+
+        log(`Authorization allowed. Receipt: ${data.receipt_signature}`, "success");
+    } catch (error) {
+        log(`Authorization request failed: ${error.message}`, "error");
+    } finally {
+        runAuthorizeButton.disabled = false;
     }
 });
 
-btnHighRisk.addEventListener('click', async () => {
-    log(`Executing High-Risk Action ($2000)...`, 'info');
+copyKeyButton.addEventListener("click", () => copyText(currentApiKey, copyKeyButton));
+copyCurlButton.addEventListener("click", () => copyText(curlSnippet.textContent, copyCurlButton));
+copyJsButton.addEventListener("click", () => copyText(jsSnippet.textContent, copyJsButton));
 
-    try {
-        const res = await fetch(`${API_BASE}/v1/authorize`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': AUTH_HEADER
-            },
-            body: JSON.stringify({
-                policy_id: currentPolicyId,
-                requester: "agent://ui_demo",
-                action: {
-                    type: "wire_transfer",
-                    http_method: "POST",
-                    resource: "/wallets/primary",
-                    amount_usd: 2000
-                },
-                reasoning_trace: "High value wire transfer of $2000."
-            })
-        });
-
-        if (res.status === 402) {
-            log(`402 Payment Required! Action blocked by Sentinel.`, 'error');
-            log(`Solana x402 verification required for amounts > $1000.`, 'info');
-            btnUnlock.disabled = false;
-            btnHighRisk.disabled = true;
-        } else {
-            const data = await res.json();
-            log(`Result: ${JSON.stringify(data)}`, 'info');
-        }
-    } catch (e) {
-        log(`Error: ${e.message}`, 'error');
-    }
-});
-
-btnUnlock.addEventListener('click', async () => {
-    log(`Agent signing micro-payment on Solana...`, 'solana');
-    log(`Resubmitting intent with x-solana-tx-signature header...`, 'info');
-
-    // Simulate slight delay for "signing"
-    btnUnlock.textContent = "Verifying on Chain...";
-
-    setTimeout(async () => {
-        try {
-            const res = await fetch(`${API_BASE}/v1/authorize`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': AUTH_HEADER,
-                    'x-solana-tx-signature': '3fP...' + Math.random().toString(36).substr(2, 6) // Mocking the frontend tx signature inclusion
-                },
-                body: JSON.stringify({
-                    policy_id: currentPolicyId,
-                    requester: "agent://ui_demo",
-                    action: {
-                        type: "wire_transfer",
-                        http_method: "POST",
-                        resource: "/wallets/primary",
-                        amount_usd: 2000
-                    },
-                    reasoning_trace: "High value wire transfer of $2000."
-                })
-            });
-
-            const data = await res.json();
-            if (res.ok) {
-                log(`x402 Payment Verified! Action Unlocked.`, 'success');
-                log(`Immutable Audit Anchor: <a href="https://explorer.solana.com/tx/${data.receipt_signature}?cluster=devnet" target="_blank" style="color:var(--solana-green)">${data.receipt_signature.substring(0, 25)}...</a>`, 'solana');
-                btnUnlock.textContent = "Verified ✓";
-                btnUnlock.disabled = true;
-                btnHighRisk.disabled = false;
-            } else {
-                log(`Failed: ${JSON.stringify(data)}`, 'error');
-                btnUnlock.textContent = "Sign & Execute Transfer";
-            }
-        } catch (e) {
-            log(`Error: ${e.message}`, 'error');
-            btnUnlock.textContent = "Sign & Execute Transfer";
-        }
-    }, 800);
-});
-
-log('Frontend initialized. Ready.', 'info');
+loadOverview();
+updateSnippets();
+log("Developer portal ready.");
