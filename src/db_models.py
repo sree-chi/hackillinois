@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Float, Boolean, DateTime, Enum, JSON
+
+from sqlalchemy import Column, String, Float, Boolean, DateTime, Enum, JSON, Integer, Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from src.database import Base
@@ -24,8 +25,15 @@ class PolicyModel(Base):
     policy_hash = Column(String(64), nullable=False, index=True)
     # Using JSONB if on postgres, otherwise JSON for sqlite fallback if needed, but JSON is safer cross-db
     rules = Column(JSON, nullable=False)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    root_policy_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     idempotency_key = Column(String, unique=True, index=True, nullable=True)
+
+    __table_args__ = (
+        Index("ix_policies_root_version", "root_policy_id", "version"),
+        Index("ix_policies_created_at", "created_at"), 
+    )
 
 class AuditRecordModel(Base):
     __tablename__ = "audit_records"
@@ -49,6 +57,12 @@ class AuditRecordModel(Base):
     receipt_signature = Column(String, nullable=True)
     violation = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_audit_policy_created", "policy_id", "created_at"), 
+        Index("ix_audit_request_created", "policy_id", "status", "created_at")
+        
+    )
 
 
 class AuthorizationProofModel(Base):
