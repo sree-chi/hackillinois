@@ -48,6 +48,10 @@ textarea {
     gap: 24px;
 }
 
+.is-hidden {
+    display: none !important;
+}
+
 .topbar {
     display: flex;
     align-items: center;
@@ -92,6 +96,17 @@ textarea {
     gap: 24px;
 }
 
+.auth-shell,
+.dashboard-shell {
+    display: grid;
+    gap: 24px;
+}
+
+.auth-shell {
+    min-height: calc(100vh - 140px);
+    align-content: center;
+}
+
 .panel {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -118,6 +133,23 @@ textarea {
     border-radius: 50%;
     background: rgba(15, 108, 91, 0.08);
     filter: blur(2px);
+}
+
+.dashboard-hero-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.dashboard-hero-actions {
+    display: grid;
+    gap: 14px;
+    min-width: min(100%, 320px);
+}
+
+.compact-card {
+    margin-top: 0;
 }
 
 .eyebrow {
@@ -498,7 +530,8 @@ a {
     .topbar,
     .topbar-links,
     .action-row,
-    .activity-header {
+    .activity-header,
+    .dashboard-hero-header {
         flex-direction: column;
         align-items: stretch;
     }

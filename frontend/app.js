@@ -14,6 +14,8 @@ let currentAccount = null;
 const docsLink = document.getElementById("docs-link");
 const apiBaseLabel = document.getElementById("api-base-label");
 const apiStatus = document.getElementById("api-status");
+const authView = document.getElementById("auth-view");
+const dashboardView = document.getElementById("dashboard-view");
 const registerForm = document.getElementById("register-form");
 const loginForm = document.getElementById("login-form");
 const logoutButton = document.getElementById("logout-button");
@@ -156,6 +158,8 @@ function renderApiKeys(apiKeys) {
 
 function updateDashboardState() {
     const signedIn = Boolean(currentSessionToken && currentAccount);
+    authView.classList.toggle("is-hidden", signedIn);
+    dashboardView.classList.toggle("is-hidden", !signedIn);
     issueKeyButton.disabled = !signedIn;
     logoutButton.disabled = !signedIn;
     registerForm.querySelector("button").disabled = false;
@@ -170,11 +174,11 @@ function updateDashboardState() {
         renderApiKeys([]);
     }
 
-    createPolicyButton.disabled = !currentApiKey;
-    copyKeyButton.disabled = !currentApiKey;
-    copyCurlButton.disabled = !currentApiKey;
-    copyJsButton.disabled = !currentApiKey;
-    runAuthorizeButton.disabled = !(currentApiKey && currentPolicyId);
+    createPolicyButton.disabled = !(signedIn && currentApiKey);
+    copyKeyButton.disabled = !(signedIn && currentApiKey);
+    copyCurlButton.disabled = !(signedIn && currentApiKey);
+    copyJsButton.disabled = !(signedIn && currentApiKey);
+    runAuthorizeButton.disabled = !(signedIn && currentApiKey && currentPolicyId);
 }
 
 async function fetchDashboard() {
@@ -219,6 +223,8 @@ async function authenticate(path, payload, successMessage) {
     currentAccount = data.account;
     saveLocalState();
     await fetchDashboard();
+    registerForm.reset();
+    loginForm.reset();
     log(successMessage, "success");
 }
 

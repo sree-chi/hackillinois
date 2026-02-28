@@ -20,185 +20,205 @@
                 </div>
             </nav>
 
-            <section class="hero panel">
-                <p class="eyebrow">Account-Based API Access</p>
-                <h1>Sign in first, then issue API keys tied to your account and manage agent policies from one dashboard.</h1>
-                <p class="hero-copy">
-                    Sentinel Auth now requires an account session before key issuance. Your dashboard shows the current
-                    account, generated API keys, quickstart snippets, and testing tools for policy and verification flows.
-                </p>
-                <div class="hero-meta">
-                    <div>
-                        <span class="meta-label">Base URL</span>
-                        <code id="api-base-label">Loading...</code>
+            <section id="auth-view" class="auth-shell">
+                <section class="hero panel">
+                    <p class="eyebrow">Account-Based API Access</p>
+                    <h1>Start at the login page, then move straight into the Sentinel dashboard after account creation or sign-in.</h1>
+                    <p class="hero-copy">
+                        Create an account to issue API keys tied to your identity, generate starter policies, and review
+                        agent verification activity from one dashboard.
+                    </p>
+                    <div class="hero-meta">
+                        <div>
+                            <span class="meta-label">Base URL</span>
+                            <code id="api-base-label">Loading...</code>
+                        </div>
+                        <div>
+                            <span class="meta-label">Docs</span>
+                            <a id="docs-link" href="/docs" target="_blank" rel="noreferrer">Open API docs</a>
+                        </div>
+                        <div>
+                            <span class="meta-label">Status</span>
+                            <strong id="api-status">Checking...</strong>
+                        </div>
                     </div>
-                    <div>
-                        <span class="meta-label">Docs</span>
-                        <a id="docs-link" href="/docs" target="_blank" rel="noreferrer">Open API docs</a>
-                    </div>
-                    <div>
-                        <span class="meta-label">Status</span>
-                        <strong id="api-status">Checking...</strong>
-                    </div>
-                </div>
-            </section>
-
-            <section class="grid">
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Step 1</p>
-                        <h2>Create an account</h2>
-                    </div>
-                    <form id="register-form" class="stack">
-                        <label>
-                            <span>Full name</span>
-                            <input id="register-full-name" type="text" placeholder="Optional">
-                        </label>
-                        <label>
-                            <span>Email</span>
-                            <input id="register-email" type="email" placeholder="team@example.com" required>
-                        </label>
-                        <label>
-                            <span>Password</span>
-                            <input id="register-password" type="password" placeholder="Minimum 8 characters" required>
-                        </label>
-                        <button id="register-button" class="btn btn-primary" type="submit">Create account</button>
-                    </form>
                 </section>
 
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Step 2</p>
-                        <h2>Sign in</h2>
-                    </div>
-                    <form id="login-form" class="stack">
-                        <label>
-                            <span>Email</span>
-                            <input id="login-email" type="email" placeholder="team@example.com" required>
-                        </label>
-                        <label>
-                            <span>Password</span>
-                            <input id="login-password" type="password" placeholder="Your password" required>
-                        </label>
-                        <div class="action-row">
+                <section class="grid">
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Step 1</p>
+                            <h2>Create an account</h2>
+                        </div>
+                        <form id="register-form" class="stack">
+                            <label>
+                                <span>Full name</span>
+                                <input id="register-full-name" type="text" placeholder="Optional">
+                            </label>
+                            <label>
+                                <span>Email</span>
+                                <input id="register-email" type="email" placeholder="team@example.com" required>
+                            </label>
+                            <label>
+                                <span>Password</span>
+                                <input id="register-password" type="password" placeholder="Minimum 8 characters" required>
+                            </label>
+                            <button id="register-button" class="btn btn-primary" type="submit">Create account</button>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Step 2</p>
+                            <h2>Sign in</h2>
+                        </div>
+                        <form id="login-form" class="stack">
+                            <label>
+                                <span>Email</span>
+                                <input id="login-email" type="email" placeholder="team@example.com" required>
+                            </label>
+                            <label>
+                                <span>Password</span>
+                                <input id="login-password" type="password" placeholder="Your password" required>
+                            </label>
                             <button id="login-button" class="btn btn-secondary" type="submit">Login</button>
+                        </form>
+                        <div class="output-card">
+                            <h3>What happens next</h3>
+                            <p class="muted">
+                                After account creation or login, this page switches into the dashboard automatically so
+                                you can generate an API key and start testing your agent policies immediately.
+                            </p>
+                        </div>
+                    </section>
+                </section>
+            </section>
+
+            <section id="dashboard-view" class="dashboard-shell is-hidden">
+                <section class="hero panel">
+                    <div class="dashboard-hero-header">
+                        <div>
+                            <p class="eyebrow">Dashboard</p>
+                            <h1>Your Sentinel workspace for keys, policies, and verification tests.</h1>
+                            <p id="session-meta" class="hero-copy">Account session active. You can issue and manage API keys from this dashboard.</p>
+                        </div>
+                        <div class="dashboard-hero-actions">
+                            <div class="output-card compact-card">
+                                <h3>Signed in as</h3>
+                                <code id="account-summary">Not signed in.</code>
+                            </div>
                             <button id="logout-button" class="btn btn-ghost" type="button" disabled>Logout</button>
                         </div>
-                    </form>
-                    <div class="output-card">
-                        <h3>Current account</h3>
-                        <code id="account-summary">Not signed in.</code>
-                        <p id="session-meta" class="muted">Create an account or sign in to issue keys.</p>
-                    </div>
-                </section>
-            </section>
-
-            <section class="grid">
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Account</p>
-                        <h2>Issued API keys</h2>
-                    </div>
-                    <p class="muted">Each key is associated with your account. The plaintext value is only shown when a key is created.</p>
-                    <div id="api-key-list" class="dashboard-list">
-                        <div class="empty-state">No keys issued yet.</div>
                     </div>
                 </section>
 
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Step 3</p>
-                        <h2>Generate a key</h2>
-                    </div>
-                    <form id="issue-key-form" class="stack">
-                        <label>
-                            <span>App name</span>
-                            <input id="app-name" type="text" placeholder="Atlas Agent Ops" required>
-                        </label>
-                        <label>
-                            <span>Owner name</span>
-                            <input id="owner-name" type="text" placeholder="Optional">
-                        </label>
-                        <label>
-                            <span>Use case</span>
-                            <textarea id="use-case" rows="4" placeholder="Describe what your AI agents will manage."></textarea>
-                        </label>
-                        <button id="issue-key-button" class="btn btn-primary" type="submit" disabled>Issue API key</button>
-                    </form>
-
-                    <div class="output-card">
-                        <div class="output-header">
-                            <h3>Latest issued key</h3>
-                            <button id="copy-key-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                <section class="grid">
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Account</p>
+                            <h2>Issued API keys</h2>
                         </div>
-                        <code id="issued-key">Sign in to create a key.</code>
-                        <p id="issued-key-meta" class="muted">The plaintext key is only returned once.</p>
-                    </div>
-                </section>
-            </section>
-
-            <section class="grid">
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Step 4</p>
-                        <h2>Quickstart</h2>
-                    </div>
-                    <div class="snippet-group">
-                        <div class="snippet-header">
-                            <h3>cURL</h3>
-                            <button id="copy-curl-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                        <p class="muted">Each key is associated with your account. The plaintext value is only shown when a key is created.</p>
+                        <div id="api-key-list" class="dashboard-list">
+                            <div class="empty-state">No keys issued yet.</div>
                         </div>
-                        <pre id="curl-snippet" class="snippet">Sign in and issue a key to generate a ready-to-run cURL example.</pre>
-                    </div>
-                    <div class="snippet-group">
-                        <div class="snippet-header">
-                            <h3>JavaScript</h3>
-                            <button id="copy-js-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Step 3</p>
+                            <h2>Generate a key</h2>
                         </div>
-                        <pre id="js-snippet" class="snippet">Sign in and issue a key to generate a browser/server example.</pre>
-                    </div>
+                        <form id="issue-key-form" class="stack">
+                            <label>
+                                <span>App name</span>
+                                <input id="app-name" type="text" placeholder="Atlas Agent Ops" required>
+                            </label>
+                            <label>
+                                <span>Owner name</span>
+                                <input id="owner-name" type="text" placeholder="Optional">
+                            </label>
+                            <label>
+                                <span>Use case</span>
+                                <textarea id="use-case" rows="4" placeholder="Describe what your AI agents will manage."></textarea>
+                            </label>
+                            <button id="issue-key-button" class="btn btn-primary" type="submit" disabled>Issue API key</button>
+                        </form>
+
+                        <div class="output-card">
+                            <div class="output-header">
+                                <h3>Latest issued key</h3>
+                                <button id="copy-key-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                            </div>
+                            <code id="issued-key">Sign in to create a key.</code>
+                            <p id="issued-key-meta" class="muted">The plaintext key is only returned once.</p>
+                        </div>
+                    </section>
                 </section>
 
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Step 5</p>
-                        <h2>Test your key</h2>
-                    </div>
-                    <div class="stack">
-                        <label>
-                            <span>Policy name</span>
-                            <input id="custom-policy-name" type="text" value="Public portal starter policy">
-                        </label>
-                        <label>
-                            <span>Max spend USD</span>
-                            <input id="custom-spend-limit" type="number" value="5000" min="1" step="1">
-                        </label>
-                        <label>
-                            <span>Max requests per minute</span>
-                            <input id="custom-rate-limit" type="number" value="60" min="1" step="1">
-                        </label>
-                    </div>
-                    <div class="action-row">
-                        <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create starter policy</button>
-                        <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample authorize</button>
-                    </div>
-                    <div class="output-card">
-                        <h3>Current policy</h3>
-                        <code id="policy-id-label">No policy created yet.</code>
-                        <p class="muted">Open the Activity Feed to inspect receipts, blocked requests, and verification messages.</p>
+                <section class="grid">
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Step 4</p>
+                            <h2>Quickstart</h2>
+                        </div>
+                        <div class="snippet-group">
+                            <div class="snippet-header">
+                                <h3>cURL</h3>
+                                <button id="copy-curl-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                            </div>
+                            <pre id="curl-snippet" class="snippet">Sign in and issue a key to generate a ready-to-run cURL example.</pre>
+                        </div>
+                        <div class="snippet-group">
+                            <div class="snippet-header">
+                                <h3>JavaScript</h3>
+                                <button id="copy-js-button" class="btn btn-ghost" type="button" disabled>Copy</button>
+                            </div>
+                            <pre id="js-snippet" class="snippet">Sign in and issue a key to generate a browser/server example.</pre>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Step 5</p>
+                            <h2>Test your key</h2>
+                        </div>
+                        <div class="stack">
+                            <label>
+                                <span>Policy name</span>
+                                <input id="custom-policy-name" type="text" value="Public portal starter policy">
+                            </label>
+                            <label>
+                                <span>Max spend USD</span>
+                                <input id="custom-spend-limit" type="number" value="5000" min="1" step="1">
+                            </label>
+                            <label>
+                                <span>Max requests per minute</span>
+                                <input id="custom-rate-limit" type="number" value="60" min="1" step="1">
+                            </label>
+                        </div>
                         <div class="action-row">
-                            <a class="btn btn-ghost" href="/activity.html">Open activity feed</a>
+                            <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create starter policy</button>
+                            <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample authorize</button>
                         </div>
-                    </div>
+                        <div class="output-card">
+                            <h3>Current policy</h3>
+                            <code id="policy-id-label">No policy created yet.</code>
+                            <p class="muted">Open the Activity Feed to inspect receipts, blocked requests, and verification messages.</p>
+                            <div class="action-row">
+                                <a class="btn btn-ghost" href="/activity.html">Open activity feed</a>
+                            </div>
+                        </div>
+                    </section>
                 </section>
-            </section>
 
-            <section class="panel">
-                <div class="section-heading">
-                    <p class="eyebrow">Live Log</p>
-                    <h2>Portal console</h2>
-                </div>
-                <div id="console-output" class="console"></div>
+                <section class="panel">
+                    <div class="section-heading">
+                        <p class="eyebrow">Live Log</p>
+                        <h2>Portal console</h2>
+                    </div>
+                    <div id="console-output" class="console"></div>
+                </section>
             </section>
         </main>
     </div>
