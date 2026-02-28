@@ -1,5 +1,7 @@
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'https://hackillinois-tbrqg.ondigitalocean.app';
 const AUTH_HEADER = 'Bearer hackillinois_2026_super_secret';
+const btnExpensiveApi = document.getElementById('btn-expensive-api');
+const NGROK_URL = 'https://nonobservant-patrick-catchingly.ngrok-free.dev/';
 const HIGH_RISK_THRESHOLD = 1000;
 let currentPolicyId = null;
 
@@ -18,9 +20,7 @@ function log(msg, type = 'info') {
     consoleEl.scrollTop = consoleEl.scrollHeight;
 }
 
-function buildMockPaymentToken(requestBody) {
-    return `mock_x402_${btoa(JSON.stringify(requestBody)).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}`;
-}
+window.mockPaymentToken = null;
 
 btnCreate.addEventListener('click', async () => {
     log('Setting up Sentinel API connection...', 'info');
@@ -51,6 +51,10 @@ btnCreate.addEventListener('click', async () => {
             log(`Success! Created Policy ID: <strong>${currentPolicyId}</strong>`, 'success');
             btnSafe.disabled = false;
             btnHighRisk.disabled = false;
+            
+            // Enable our new demo button
+            btnExpensiveApi.disabled = false; 
+            
             btnCreate.disabled = true;
             btnCreate.textContent = "Policy Active";
         } else {
@@ -120,6 +124,11 @@ btnHighRisk.addEventListener('click', async () => {
         });
 
         if (res.status === 402) {
+            const mockTokenHeader = res.headers.get('x-mock-payment-token');
+            if (mockTokenHeader) {
+                window.mockPaymentToken = mockTokenHeader;
+            }
+
             log(`402 Payment Required! Action blocked by Sentinel.`, 'error');
             log(`Solana x402 verification required for amounts >= $${HIGH_RISK_THRESHOLD}.`, 'info');
             btnUnlock.disabled = false;
@@ -134,51 +143,142 @@ btnHighRisk.addEventListener('click', async () => {
 });
 
 btnUnlock.addEventListener('click', async () => {
-    log(`Agent signing micro-payment on Solana...`, 'solana');
-    log(`Resubmitting intent with x-solana-tx-signature header...`, 'info');
+    log(`Agent attempting to sign real micro-payment on Solana...`, 'solana');
 
-    btnUnlock.textContent = "Verifying on Chain...";
+    if (!window.solana || !window.solana.isPhantom) {
+        log('Phantom wallet not found! Please install the Phantom extension.', 'error');
+        return;
+    }
 
-    setTimeout(async () => {
-        try {
-            const requestBody = {
-                policy_id: currentPolicyId,
-                requester: "agent://ui_demo",
-                action: {
-                    type: "wire_transfer",
-                    http_method: "POST",
-                    resource: "/wallets/primary",
-                    amount_usd: 2000
-                },
-                reasoning_trace: "High value wire transfer of $2000."
-            };
+    try {
+        btnUnlock.textContent = "Connecting Wallet...";
+        const resp = await window.solana.connect();
+        const publicKey = resp.publicKey;
+        log(`Connected to Phantom: ${publicKey.toString()}`, 'success');
 
-            const res = await fetch(`${API_BASE}/v1/authorize`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': AUTH_HEADER,
-                    'x-solana-tx-signature': buildMockPaymentToken(requestBody)
-                },
-                body: JSON.stringify(requestBody)
-            });
+        const { Connection, Transaction, SystemProgram } = solanaWeb3;
+        const connection = new Connection('https://api.devnet.solana.com');
 
-            const data = await res.json();
-            if (res.ok) {
-                log(`x402 Payment Verified! Action Unlocked.`, 'success');
-                log(`Immutable Audit Anchor: <a href="https://explorer.solana.com/tx/${data.receipt_signature}?cluster=devnet" target="_blank" style="color:var(--solana-green)">${data.receipt_signature.substring(0, 25)}...</a>`, 'solana');
-                btnUnlock.textContent = "Verified";
-                btnUnlock.disabled = true;
-                btnHighRisk.disabled = false;
-            } else {
-                log(`Failed: ${JSON.stringify(data)}`, 'error');
-                btnUnlock.textContent = "Sign & Execute Transfer";
-            }
-        } catch (e) {
-            log(`Error: ${e.message}`, 'error');
+        btnUnlock.textContent = "Sending Transaction...";
+
+        // Send 1000 lamports (0.000001 SOL) to ourselves as the "safety fee" proof
+        const transaction = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: publicKey,
+                toPubkey: publicKey,
+                lamports: 1000,
+            })
+        );
+
+        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        transaction.feePayer = publicKey;
+
+        log(`Requesting signature from Phantom...`, 'info');
+        const { signature } = await window.solana.signAndSendTransaction(transaction);
+        log(`Transaction sent! Signature: ${signature.substring(0, 20)}...`, 'info');
+
+        log(`Waiting for confirmation...`, 'info');
+        await connection.confirmTransaction(signature, 'processed');
+        log(`Transaction confirmed!`, 'success');
+
+        log(`Resubmitting intent with real x-solana-tx-signature header...`, 'info');
+        btnUnlock.textContent = "Verifying with API...";
+
+        const requestBody = {
+            policy_id: currentPolicyId,
+            requester: "agent://ui_demo_live",
+            action: {
+                type: "wire_transfer",
+                http_method: "POST",
+                resource: "/wallets/primary",
+                amount_usd: 2000
+            },
+            reasoning_trace: "High value wire transfer of $2000."
+        };
+
+        const res = await fetch(`${API_BASE}/v1/authorize`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': AUTH_HEADER,
+                'x-solana-tx-signature': signature
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            log(`x402 Payment Verified by API! Action Unlocked.`, 'success');
+            log(`Immutable Audit Anchor: <a href="https://explorer.solana.com/tx/${data.receipt_signature}?cluster=devnet" target="_blank" style="color:var(--solana-green)">${data.receipt_signature.substring(0, 25)}...</a>`, 'solana');
+            btnUnlock.textContent = "Verified";
+            btnUnlock.disabled = true;
+            btnHighRisk.disabled = false;
+        } else {
+            log(`Failed: ${JSON.stringify(data.detail || data)}`, 'error');
             btnUnlock.textContent = "Sign & Execute Transfer";
         }
-    }, 800);
+
+    } catch (e) {
+        log(`Error: ${e.message}`, 'error');
+        btnUnlock.textContent = "Sign & Execute Transfer";
+    }
+});
+
+// NEW EXPENSIVE API DEMO FLOW
+btnExpensiveApi.addEventListener('click', async () => {
+    log(`[Agent] Requesting permission to use Premium API...`, 'info');
+    log(`[Agent] Target: ${NGROK_URL}`, 'info');
+
+    try {
+        // STEP 1: Intercept and ask Sentinel-Auth
+        const sentinelRes = await fetch(`${API_BASE}/v1/authorize`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': AUTH_HEADER
+            },
+            body: JSON.stringify({
+                policy_id: currentPolicyId,
+                requester: "agent://data_scraper",
+                action: {
+                    type: "premium_compute",
+                    http_method: "POST",
+                    resource: NGROK_URL, 
+                    amount_usd: 10000 // Forces the flag because policy max is $5000
+                },
+                reasoning_trace: "Running intensive data aggregation model on the external ngrok compute cluster."
+            })
+        });
+
+        // STEP 2: Evaluate Sentinel's Decision
+        if (sentinelRes.status === 403) {
+            const data = await sentinelRes.json();
+            log(`🚨 FLAG TRIPPED: Sentinel-Auth blocked the request!`, 'error');
+            log(`Reason: ${data.detail.error.message}`, 'error');
+            log(`The expensive ngrok API was NOT called.`, 'success');
+        } else if (sentinelRes.status === 402) {
+             log(`🚨 FLAG TRIPPED: 402 Payment Required!`, 'error');
+             log(`Action exceeds risk threshold. Solana x402 verification required before calling ngrok.`, 'info');
+        } else if (sentinelRes.ok) {
+            const data = await sentinelRes.json();
+            log(`Sentinel Approved. Receipt: ${data.receipt_signature}`, 'success');
+            
+            // STEP 3: Actually execute the expensive API call since it was approved
+            log(`Executing request to ${NGROK_URL}...`, 'info');
+            try {
+                const targetRes = await fetch(NGROK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ authorized_by: "Sentinel-Auth", receipt: data.receipt_signature })
+                });
+                log(`ngrok API responded with status: ${targetRes.status}`, 'success');
+            } catch (err) {
+                log(`ngrok API call failed: ${err.message}`, 'error');
+            }
+        }
+    } catch (e) {
+        log(`Error: ${e.message}`, 'error');
+    }
 });
 
 log('Frontend initialized. Ready.', 'info');

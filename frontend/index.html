@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div class="glow-bg"></div>
 
@@ -15,7 +17,15 @@
             <h1>Sentinel-Auth <span>The Policy-Gated API Proxy</span></h1>
             <p>Agentic intent verification backed by Solana's lightning-fast Alpenglow finality.</p>
         </header>
-
+        <div class="panel premium-panel">
+            <div class="premium-content">
+                <h2>💎 Premium API Integration Demo</h2>
+                <p class="subtitle">Simulate an AI agent attempting to use a highly expensive third-party endpoint.</p>
+            </div>
+            <div class="premium-action">
+                <button id="btn-expensive-api" class="btn warning" disabled>Call Expensive ngrok API ($5,000)</button>
+            </div>
+        </div>
         <div class="dashboard">
             <!-- Left Side: Actions -->
             <section class="panel actions-panel">
@@ -60,7 +70,12 @@
             </section>
         </div>
     </main>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/buffer/6.0.3/buffer.min.js"></script>
+    <script>
+        window.Buffer = buffer.Buffer;
+    </script>
+    <script src="https://unpkg.com/@solana/web3.js@1.73.0/lib/index.iife.min.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>
