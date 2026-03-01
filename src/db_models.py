@@ -22,9 +22,13 @@ class PolicyModel(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(String(500), nullable=True)
+    policy_schema_version = Column(String(50), nullable=False, default="sentinel-policy/v1", server_default="sentinel-policy/v1")
     policy_hash = Column(String(64), nullable=False, index=True)
     # Using JSONB if on postgres, otherwise JSON for sqlite fallback if needed, but JSON is safer cross-db
     rules = Column(JSON, nullable=False)
+    risk_categories = Column(JSON, nullable=False, default=list, server_default="[]")
+    budget_config = Column(JSON, nullable=False, default=dict, server_default="{}")
+    required_approvers = Column(JSON, nullable=False, default=list, server_default="[]")
     version = Column(Integer, nullable=False, default=1, server_default="1")
     root_policy_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -50,6 +54,7 @@ class AuditRecordModel(Base):
     http_method = Column(String, nullable=False)
     resource = Column(String, nullable=False)
     amount_usd = Column(Float, nullable=True)
+    reasoning_trace = Column(String, nullable=True)
     action_hash = Column(String(64), nullable=True, index=True)
     policy_hash = Column(String(64), nullable=True, index=True)
     proof_id = Column(String, nullable=True, index=True)
@@ -59,9 +64,8 @@ class AuditRecordModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        Index("ix_audit_policy_created", "policy_id", "created_at"), 
-        Index("ix_audit_request_created", "policy_id", "status", "created_at")
-        
+        Index("ix_audit_policy_created", "policy_id", "created_at"),
+        Index("ix_audit_request_created", "policy_id", "status", "created_at"),
     )
 
 
@@ -105,6 +109,7 @@ class AccountModel(Base):
 
     account_id = Column(String, primary_key=True, index=True)
     email = Column(String(200), nullable=False, unique=True, index=True)
+    phone_number = Column(String(20), nullable=True, unique=True, index=True)
     full_name = Column(String(100), nullable=True)
     password_hash = Column(String(200), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -119,6 +124,24 @@ class AccountSessionModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AccountPhoneVerificationModel(Base):
+    __tablename__ = "account_phone_verifications"
+
+    verification_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=True, index=True)
+    phone_number = Column(String(20), nullable=False, index=True)
+    code_hash = Column(String(64), nullable=False)
+    full_name = Column(String(100), nullable=True)
+    delivery_channel = Column(String(20), nullable=False, default="mock", server_default="mock")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_account_phone_verifications_phone_created", "phone_number", "created_at"),
+    )
 
 
 class AccountWalletModel(Base):
@@ -160,3 +183,18 @@ class AccountApiClientModel(Base):
     account_id = Column(String, nullable=False, index=True)
     client_id = Column(String, nullable=False, unique=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AgentModel(Base):
+    __tablename__ = "agents"
+
+    agent_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    wallet_address = Column(String(120), nullable=True, index=True)
+    description = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_agents_account_created", "account_id", "created_at"),
+    )

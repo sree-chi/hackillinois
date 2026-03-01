@@ -14,6 +14,11 @@ let currentAccount = null;
 let currentLinkedWallets = [];
 let selectedWalletAddress = "";
 let phantomProviderReady = false;
+let pendingPhoneNumber = "";
+
+function accountIdentity(account) {
+    return account.email;
+}
 
 const issueKeyForm = document.getElementById("issue-key-form");
 const issueKeyButton = document.getElementById("issue-key-button");
@@ -42,6 +47,13 @@ const walletNetworkLabel = document.getElementById("wallet-network-label");
 const walletLastSync = document.getElementById("wallet-last-sync");
 const walletTransactionList = document.getElementById("wallet-transaction-list");
 const logoutButton = document.getElementById("logout-button");
+const phone2faForm = document.getElementById("phone-2fa-form");
+const phone2faNumber = document.getElementById("phone-2fa-number");
+const phone2faCode = document.getElementById("phone-2fa-code");
+const phone2faRequestButton = document.getElementById("phone-2fa-request-button");
+const phone2faVerifyButton = document.getElementById("phone-2fa-verify-button");
+const phone2faSummary = document.getElementById("phone-2fa-summary");
+const phone2faStatus = document.getElementById("phone-2fa-status");
 
 function resolveApiBase() {
     const { hostname, origin } = window.location;
@@ -105,6 +117,20 @@ function formatDate(value) {
         return "Not available";
     }
     return new Date(value).toLocaleString();
+}
+
+function setPhone2faStatus(message, type = "muted") {
+    phone2faStatus.textContent = message;
+    phone2faStatus.dataset.state = type;
+}
+
+function renderPhone2fa(account) {
+    const verifiedPhone = account?.phone_number || "";
+    phone2faSummary.textContent = verifiedPhone || "No verified phone number.";
+    phone2faNumber.value = verifiedPhone || pendingPhoneNumber || "";
+    if (!verifiedPhone && !pendingPhoneNumber) {
+        setPhone2faStatus("Request a code, then confirm it here. In mock mode the code is shown in the status message.");
+    }
 }
 
 function bytesToBase64(bytes) {
@@ -286,8 +312,10 @@ function updateDashboardState() {
         return;
     }
 
-    accountSummary.textContent = `${currentAccount.email}${currentAccount.full_name ? ` | ${currentAccount.full_name}` : ""}`;
+    accountSummary.textContent = `${accountIdentity(currentAccount)}${currentAccount.full_name ? ` | ${currentAccount.full_name}` : ""}`;
     sessionMeta.textContent = "Account session active. You can issue and manage API keys from this dashboard.";
+    phone2faRequestButton.disabled = false;
+    phone2faVerifyButton.disabled = false;
     createPolicyButton.disabled = !currentApiKey;
     copyKeyButton.disabled = !currentApiKey;
     copyCurlButton.disabled = !currentApiKey;
@@ -315,6 +343,7 @@ async function fetchDashboard() {
         }
 
         currentAccount = data.account;
+        renderPhone2fa(currentAccount);
         renderApiKeys(data.api_keys || []);
         renderLinkedWallets(data.linked_wallets || []);
         if (currentLinkedWallets.length) {
@@ -591,6 +620,54 @@ runAuthorizeButton.addEventListener("click", async () => {
 });
 
 logoutButton.addEventListener("click", clearSession);
+
+phone2faRequestButton.addEventListener("click", async () => {
+    if (!currentSessionToken) return;
+    try {
+        const response = await fetch(`${API_BASE}/v1/accounts/me/phone-2fa/request-code`, {
+            method: "POST",
+            headers: sessionHeaders(),
+            body: JSON.stringify({ phone_number: phone2faNumber.value.trim() }),
+        });
+        const data = await readApiResponse(response);
+        if (!response.ok) throw new Error(data.detail?.error?.message || data.message || JSON.stringify(data));
+        pendingPhoneNumber = data.phone_number;
+        phone2faNumber.value = data.phone_number;
+        const codeMessage = data.dev_code ? ` Code: ${data.dev_code}` : "";
+        setPhone2faStatus(`Verification code sent to ${data.phone_number} via ${data.delivery_channel}.${codeMessage}`, "success");
+        log(`Sent phone verification code for ${data.phone_number}`, "success");
+    } catch (error) {
+        setPhone2faStatus(`Phone verification request failed: ${error.message}`, "error");
+        log(`Phone verification request failed: ${error.message}`, "error");
+    }
+});
+
+phone2faForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentSessionToken) return;
+    try {
+        const response = await fetch(`${API_BASE}/v1/accounts/me/phone-2fa/verify-code`, {
+            method: "POST",
+            headers: sessionHeaders(),
+            body: JSON.stringify({
+                phone_number: pendingPhoneNumber || phone2faNumber.value.trim(),
+                code: phone2faCode.value.trim(),
+            }),
+        });
+        const data = await readApiResponse(response);
+        if (!response.ok) throw new Error(data.detail?.error?.message || data.message || JSON.stringify(data));
+        currentAccount = data;
+        pendingPhoneNumber = "";
+        phone2faCode.value = "";
+        renderPhone2fa(currentAccount);
+        updateDashboardState();
+        setPhone2faStatus(`Phone number ${data.phone_number} verified on this account.`, "success");
+        log(`Verified phone number ${data.phone_number}`, "success");
+    } catch (error) {
+        setPhone2faStatus(`Phone verification failed: ${error.message}`, "error");
+        log(`Phone verification failed: ${error.message}`, "error");
+    }
+});
 
 async function copyText(value, button) {
     await navigator.clipboard.writeText(value);

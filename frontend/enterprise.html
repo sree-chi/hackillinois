@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sentinel — Enterprise Governance</title>
+    <meta name="description"
+        content="Enterprise Governance Dashboard — monitor agent activity, budgets, and audit trails backed by Solana." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+        /* ── Enterprise-specific overrides ── */
+        :root {
+            --ent-bg: #0a0c12;
+            --ent-surface: #111420;
+            --ent-surface-2: #171b2a;
+            --ent-border: rgba(99, 102, 241, 0.18);
+            --ent-accent: #6366f1;
+            --ent-accent-dim: rgba(99, 102, 241, 0.12);
+            --ent-green: #10b981;
+            --ent-red: #ef4444;
+            --ent-amber: #f59e0b;
+            --ent-text: #e2e8f0;
+            --ent-muted: #64748b;
+            --ent-glow: 0 0 40px rgba(99, 102, 241, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--ent-bg);
+            color: var(--ent-text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── TopBar ── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            height: 60px;
+            border-bottom: 1px solid var(--ent-border);
+            background: rgba(10, 12, 18, 0.95);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 700;
+            font-size: 1.05rem;
+            letter-spacing: -0.01em;
+        }
+
+        .topbar-brand .sentinel-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--ent-accent);
+            box-shadow: 0 0 8px var(--ent-accent);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.6;
+                transform: scale(0.85);
+            }
+        }
+
+        .topbar-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .topbar-nav a {
+            color: var(--ent-muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        .topbar-nav a:hover {
+            color: var(--ent-text);
+            background: var(--ent-accent-dim);
+        }
+
+        .topbar-nav a.active {
+            color: var(--ent-text);
+            background: var(--ent-accent-dim);
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .kill-switch-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 1rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .kill-switch-btn:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+            box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
+        }
+
+        .kill-switch-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .kill-switch-btn .ks-icon {
+            font-size: 1rem;
+        }
+
+        #account-chip {
+            font-size: 0.8rem;
+            color: var(--ent-muted);
+            padding: 0.35rem 0.75rem;
+            background: var(--ent-surface-2);
+            border: 1px solid var(--ent-border);
+            border-radius: 20px;
+        }
+
+        /* ── Layout ── */
+        .page-wrapper {
+            display: flex;
+            flex: 1;
+        }
+
+        .sidebar {
+            width: 220px;
+            min-height: calc(100vh - 60px);
+            border-right: 1px solid var(--ent-border);
+            padding: 1.5rem 1rem;
+            background: rgba(17, 20, 32, 0.6);
+            flex-shrink: 0;
+        }
+
+        .sidebar-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .sidebar-label {
+            font-size: 0.68rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ent-muted);
+            margin-bottom: 0.5rem;
+            padding-left: 0.5rem;
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem 0.6rem;
+            border-radius: 7px;
+            color: var(--ent-muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: all 0.15s;
+            margin-bottom: 0.1rem;
+        }
+
+        .sidebar-link:hover {
+            color: var(--ent-text);
+            background: var(--ent-accent-dim);
+        }
+
+        .sidebar-link.active {
+            color: var(--ent-text);
+            background: var(--ent-accent-dim);
+        }
+
+        .sidebar-link .ico {
+            font-size: 1rem;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        /* ── Section headers ── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--ent-text);
+        }
+
+        .section-sub {
+            font-size: 0.8rem;
+            color: var(--ent-muted);
+            margin-top: 0.2rem;
+        }
+
+        /* ── Config banner ── */
+        .config-banner {
+            background: var(--ent-surface);
+            border: 1px solid var(--ent-border);
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: flex-end;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .config-group label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--ent-muted);
+        }
+
+        .config-input {
+            background: var(--ent-surface-2);
+            border: 1px solid var(--ent-border);
+            color: var(--ent-text);
+            padding: 0.5rem 0.75rem;
+            border-radius: 7px;
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+            outline: none;
+            transition: border-color 0.15s;
+            width: 100%;
+        }
+
+        .config-input:focus {
+            border-color: var(--ent-accent);
+        }
+
+        .load-btn {
+            padding: 0.55rem 1.25rem;
+            background: var(--ent-accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s, transform 0.1s;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+
+        .load-btn:hover:not(:disabled) {
+            opacity: 0.88;
+            transform: translateY(-1px);
+        }
+
+        .load-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ── Stats row ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--ent-surface);
+            border: 1px solid var(--ent-border);
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--stat-color, var(--ent-accent));
+            opacity: 0.7;
+        }
+
+        .stat-card:hover {
+            border-color: var(--ent-accent);
+            box-shadow: var(--ent-glow);
+        }
+
+        .stat-label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--ent-muted);
+            margin-bottom: 0.6rem;
+        }
+
+        .stat-value {
+            font-size: 1.85rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--stat-color, var(--ent-text));
+        }
+
+        .stat-sub {
+            font-size: 0.75rem;
+            color: var(--ent-muted);
+            margin-top: 0.35rem;
+        }
+
+        /* ── Budget bar ── */
+        .budget-card {
+            background: var(--ent-surface);
+            border: 1px solid var(--ent-border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            transition: box-shadow 0.2s;
+        }
+
+        .budget-card:hover {
+            box-shadow: var(--ent-glow);
+        }
+
+        .budget-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .budget-amounts {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+        }
+
+        .budget-spent {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--ent-text);
+        }
+
+        .budget-limit {
+            font-size: 1rem;
+            color: var(--ent-muted);
+        }
+
+        .progress-track {
+            background: var(--ent-surface-2);
+            border-radius: 999px;
+            height: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--ent-accent), #8b5cf6);
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .progress-fill.danger {
+            background: linear-gradient(90deg, #ef4444, #f97316);
+        }
+
+        .progress-fill.warning {
+            background: linear-gradient(90deg, #f59e0b, #f97316);
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 50%, transparent 100%);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        .budget-legend {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.78rem;
+            color: var(--ent-muted);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* ── Main panels: Agent table + Audit feed ── */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1.6fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--ent-surface);
+            border: 1px solid var(--ent-border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--ent-border);
+        }
+
+        .panel-title {
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
+
+        .panel-badge {
+            font-size: 0.72rem;
+            padding: 0.2rem 0.55rem;
+            background: var(--ent-accent-dim);
+            border: 1px solid var(--ent-border);
+            border-radius: 99px;
+            color: var(--ent-accent);
+        }
+
+        .panel-body {
+            padding: 1rem 1.25rem;
+            max-height: 480px;
+            overflow-y: auto;
+        }
+
+        .panel-body::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .panel-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .panel-body::-webkit-scrollbar-thumb {
+            background: var(--ent-border);
+            border-radius: 2px;
+        }
+
+        /* ── Agent table ── */
+        .agent-add-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .agent-add-row input {
+            flex: 1;
+            background: var(--ent-surface-2);
+            border: 1px solid var(--ent-border);
+            color: var(--ent-text);
+            padding: 0.4rem 0.65rem;
+            border-radius: 7px;
+            font-size: 0.82rem;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .agent-add-row input:focus {
+            border-color: var(--ent-accent);
+        }
+
+        .btn-sm {
+            padding: 0.4rem 0.85rem;
+            border-radius: 7px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+
+        .btn-sm-primary {
+            background: var(--ent-accent);
+            color: white;
+        }
+
+        .btn-sm-primary:hover:not(:disabled) {
+            opacity: 0.85;
+        }
+
+        .btn-sm-danger {
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-sm-danger:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.22);
+        }
+
+        .agent-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.7rem 0;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+            gap: 0.75rem;
+        }
+
+        .agent-row:last-child {
+            border-bottom: none;
+        }
+
+        .agent-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .agent-name {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--ent-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .agent-wallet {
+            font-size: 0.72rem;
+            color: var(--ent-muted);
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .agent-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .dot-active {
+            background: var(--ent-green);
+            box-shadow: 0 0 6px var(--ent-green);
+        }
+
+        .dot-idle {
+            background: var(--ent-muted);
+        }
+
+        /* ── Audit Feed ── */
+        .audit-filters {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-chip {
+            padding: 0.3rem 0.75rem;
+            border-radius: 99px;
+            font-size: 0.76rem;
+            font-weight: 500;
+            border: 1px solid var(--ent-border);
+            cursor: pointer;
+            background: transparent;
+            color: var(--ent-muted);
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .filter-chip.active-chip {
+            background: var(--ent-accent-dim);
+            border-color: var(--ent-accent);
+            color: var(--ent-accent);
+        }
+
+        .filter-chip:hover {
+            color: var(--ent-text);
+        }
+
+        .audit-card {
+            border: 1px solid var(--ent-border);
+            border-radius: 10px;
+            padding: 0.9rem 1rem;
+            margin-bottom: 0.65rem;
+            position: relative;
+            transition: border-color 0.15s, transform 0.1s;
+            background: var(--ent-surface-2);
+        }
+
+        .audit-card:hover {
+            border-color: var(--ent-accent);
+            transform: translateY(-1px);
+        }
+
+        .audit-card.allowed {
+            border-left: 3px solid var(--ent-green);
+        }
+
+        .audit-card.blocked {
+            border-left: 3px solid var(--ent-red);
+        }
+
+        .audit-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            gap: 0.75rem;
+        }
+
+        .audit-action {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--ent-text);
+        }
+
+        .audit-action span {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            color: var(--ent-muted);
+            margin-left: 0.35rem;
+        }
+
+        .status-badge {
+            padding: 0.2rem 0.6rem;
+            border-radius: 99px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            flex-shrink: 0;
+        }
+
+        .badge-allowed {
+            background: rgba(16, 185, 129, 0.12);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-blocked {
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .badge-anchored {
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--ent-accent);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .badge-pending {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--ent-amber);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .audit-meta {
+            font-size: 0.74rem;
+            color: var(--ent-muted);
+            margin-bottom: 0.45rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .audit-meta .sep {
+            opacity: 0.4;
+        }
+
+        .audit-trace {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            font-style: italic;
+            line-height: 1.45;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0.65rem;
+            background: rgba(99, 102, 241, 0.06);
+            border-radius: 6px;
+            border-left: 2px solid var(--ent-accent);
+        }
+
+        .audit-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.35rem 0.75rem;
+        }
+
+        .audit-kv {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+        }
+
+        .audit-kv-label {
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ent-muted);
+        }
+
+        .audit-kv-value {
+            font-size: 0.74rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .solana-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.74rem;
+            color: var(--ent-accent);
+            text-decoration: none;
+            margin-top: 0.4rem;
+            transition: opacity 0.15s;
+        }
+
+        .solana-link:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+        }
+
+        .verify-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.15rem 0.5rem;
+            border-radius: 99px;
+        }
+
+        .verify-check.ok {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+        }
+
+        .verify-check.fail {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .verify-check.mock {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--ent-accent);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2.5rem 1rem;
+            color: var(--ent-muted);
+            font-size: 0.85rem;
+        }
+
+        .empty-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* ── Kill switch confirm ── */
+        #ks-confirm-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(6px);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #ks-confirm-overlay.open {
+            display: flex;
+        }
+
+        .ks-dialog {
+            background: var(--ent-surface);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 420px;
+            width: 90%;
+            box-shadow: 0 0 60px rgba(239, 68, 68, 0.2);
+        }
+
+        .ks-dialog h2 {
+            font-size: 1.15rem;
+            margin-bottom: 0.5rem;
+            color: #ef4444;
+        }
+
+        .ks-dialog p {
+            font-size: 0.85rem;
+            color: var(--ent-muted);
+            margin-bottom: 1.25rem;
+            line-height: 1.5;
+        }
+
+        .ks-dialog-btns {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        .btn-cancel {
+            padding: 0.55rem 1.1rem;
+            background: var(--ent-surface-2);
+            border: 1px solid var(--ent-border);
+            color: var(--ent-text);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .btn-kill {
+            padding: 0.55rem 1.1rem;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: opacity 0.15s;
+        }
+
+        .btn-kill:hover {
+            opacity: 0.88;
+        }
+
+        /* ── Toast notifications ── */
+        #toast-stack {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 0.7rem 1.1rem;
+            border-radius: 9px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            max-width: 340px;
+            animation: toast-in 0.28s ease;
+            pointer-events: auto;
+        }
+
+        @keyframes toast-in {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .toast-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #10b981;
+        }
+
+        .toast-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+        }
+
+        .toast-info {
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: var(--ent-accent);
+        }
+
+        .loading-pulse {
+            animation: load-fade 1.4s ease-in-out infinite;
+        }
+
+        @keyframes load-fade {
+
+            0%,
+            100% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Top Bar -->
+    <header class="topbar">
+        <div class="topbar-brand">
+            <div class="sentinel-dot"></div>
+            Sentinel
+            <span
+                style="font-size:0.75rem; color:var(--ent-muted); font-weight:400; margin-left:0.25rem;">Enterprise</span>
+        </div>
+        <nav class="topbar-nav">
+            <a href="/dashboard.html">Dashboard</a>
+            <a href="/activity.html">Activity</a>
+            <a href="/agent.html">Agent Demo</a>
+            <a href="/enterprise.html" class="active">Governance</a>
+        </nav>
+        <div class="topbar-actions">
+            <span id="account-chip">Not signed in</span>
+            <button class="kill-switch-btn" id="kill-switch-btn" disabled>
+                <span class="ks-icon">🔴</span> Kill Switch
+            </button>
+        </div>
+    </header>
+
+    <!-- Kill Switch Confirm Dialog -->
+    <div id="ks-confirm-overlay">
+        <div class="ks-dialog">
+            <h2>⚠️ Confirm Kill Switch</h2>
+            <p>This will <strong>suspend all active API keys</strong> for your account, immediately blocking all agent
+                activity. You can restore individual keys from the Dashboard.</p>
+            <div class="ks-dialog-btns">
+                <button class="btn-cancel" id="ks-cancel-btn">Cancel</button>
+                <button class="btn-kill" id="ks-confirm-btn">Suspend All Keys</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Stack -->
+    <div id="toast-stack"></div>
+
+    <div class="page-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-label">Governance</div>
+                <a href="#overview" class="sidebar-link active"><span class="ico">📊</span> Overview</a>
+                <a href="#budget" class="sidebar-link"><span class="ico">💰</span> Budget</a>
+                <a href="#agents" class="sidebar-link"><span class="ico">🤖</span> Agents</a>
+                <a href="#audit" class="sidebar-link"><span class="ico">🔍</span> Audit Feed</a>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-label">Navigation</div>
+                <a href="/dashboard.html" class="sidebar-link"><span class="ico">🗝</span> Dashboard</a>
+                <a href="/activity.html" class="sidebar-link"><span class="ico">📋</span> Raw Activity</a>
+                <a href="/agent.html" class="sidebar-link"><span class="ico">✨</span> Agent Demo</a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Config Banner -->
+            <div class="config-banner" id="overview">
+                <div class="config-group">
+                    <label>API Key</label>
+                    <input type="text" class="config-input" id="cfg-api-key" placeholder="ska_live_…" />
+                </div>
+                <div class="config-group">
+                    <label>Policy ID</label>
+                    <input type="text" class="config-input" id="cfg-policy-id" placeholder="pol_…" />
+                </div>
+                <button class="load-btn" id="load-btn">Load Dashboard</button>
+            </div>
+
+            <!-- Stats Row -->
+            <div class="stats-grid">
+                <div class="stat-card" style="--stat-color: var(--ent-text)">
+                    <div class="stat-label">Total Requests</div>
+                    <div class="stat-value" id="stat-total">—</div>
+                    <div class="stat-sub">All time</div>
+                </div>
+                <div class="stat-card" style="--stat-color: var(--ent-green)">
+                    <div class="stat-label">Allowed</div>
+                    <div class="stat-value" id="stat-allowed">—</div>
+                    <div class="stat-sub">Passed policy</div>
+                </div>
+                <div class="stat-card" style="--stat-color: var(--ent-red)">
+                    <div class="stat-label">Blocked</div>
+                    <div class="stat-value" id="stat-blocked">—</div>
+                    <div class="stat-sub">Policy violations</div>
+                </div>
+                <div class="stat-card" style="--stat-color: var(--ent-accent)">
+                    <div class="stat-label">Anchored</div>
+                    <div class="stat-value" id="stat-anchored">—</div>
+                    <div class="stat-sub">On Solana</div>
+                </div>
+                <div class="stat-card" style="--stat-color: var(--ent-amber)">
+                    <div class="stat-label">Total Spend</div>
+                    <div class="stat-value" id="stat-spend">—</div>
+                    <div class="stat-sub">USD (allowed actions)</div>
+                </div>
+            </div>
+
+            <!-- Budget Visualization -->
+            <div class="budget-card" id="budget">
+                <div class="budget-header">
+                    <div>
+                        <div class="section-title">Treasury & Budget</div>
+                        <div class="section-sub" id="budget-sub">Load a policy to view spend allocation</div>
+                    </div>
+                    <div class="budget-amounts">
+                        <span class="budget-spent" id="budget-spent">$0</span>
+                        <span class="budget-limit" id="budget-limit">/ — limit</span>
+                    </div>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="budget-bar" style="width: 0%;"></div>
+                </div>
+                <div class="budget-legend">
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: var(--ent-accent);"></div>
+                        Spent by agents
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot"
+                            style="background: var(--ent-surface-2); border: 1px solid var(--ent-border);"></div>
+                        <span id="budget-remaining-label">Remaining</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two Column Layout: Agents | Audit Feed -->
+            <div class="two-col">
+
+                <!-- Agent Identity Panel -->
+                <div class="panel" id="agents">
+                    <div class="panel-head">
+                        <span class="panel-title">🤖 Agent Identity</span>
+                        <span class="panel-badge" id="agent-count">0 registered</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="agent-add-row">
+                            <input type="text" id="new-agent-name" placeholder="Agent name…" />
+                            <input type="text" id="new-agent-wallet" placeholder="Wallet (optional)…" />
+                            <button class="btn-sm btn-sm-primary" id="add-agent-btn">Add</button>
+                        </div>
+                        <div id="agent-list">
+                            <div class="empty-state">
+                                <div class="empty-icon">🤖</div>
+                                Load dashboard to see agents.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deep Audit Feed -->
+                <div class="panel" id="audit">
+                    <div class="panel-head">
+                        <span class="panel-title">🔍 Deep Audit Feed</span>
+                        <div style="display:flex; gap:0.5rem; align-items:center;">
+                            <span class="panel-badge" id="audit-count">0 events</span>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="audit-filters">
+                            <button class="filter-chip active-chip" data-filter="all">All</button>
+                            <button class="filter-chip" data-filter="allowed">Allowed</button>
+                            <button class="filter-chip" data-filter="blocked">Blocked</button>
+                            <button class="filter-chip" data-filter="anchored">Anchored</button>
+                        </div>
+                        <div id="audit-feed">
+                            <div class="empty-state">
+                                <div class="empty-icon">🔍</div>
+                                Load dashboard to view audit trail.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+    </div>
+
+    <script type="module" src="./enterprise.js"></script>
+</body>
+
+</html>

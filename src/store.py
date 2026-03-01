@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func as sql_func
 from sqlalchemy.orm import Session
 
 from src.db_models import (
     AccountApiClientModel,
     AccountModel,
+    AccountPhoneVerificationModel,
     AccountSessionModel,
     AccountWalletLinkChallengeModel,
     AccountWalletModel,
+    AgentModel,
     ApiClientModel,
     AuditRecordModel,
     AuditStatusEnum,
@@ -21,12 +24,16 @@ from src.models import (
     AccountApiKeySummary,
     AccountRecord,
     AccountSessionRecord,
+    AgentRecord,
     ApiClientRecord,
     AuditRecord,
+    AuditStatsResponse,
     AuthorizationProof,
+    CreateAgentRequest,
     CreatePolicyRequest,
     IssueApiKeyRequest,
     LinkedWalletRecord,
+    POLICY_SCHEMA_VERSION,
     Policy,
     WalletLinkChallengeRecord,
     canonical_hash,
@@ -39,11 +46,18 @@ class DatabaseStore:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create_account(self, email: str, password_hash: str, full_name: str | None) -> AccountRecord:
-        account = AccountRecord(email=email, full_name=full_name)
+    def create_account(
+        self,
+        email: str,
+        password_hash: str,
+        full_name: str | None,
+        phone_number: str | None = None,
+    ) -> AccountRecord:
+        account = AccountRecord(email=email, phone_number=phone_number, full_name=full_name)
         row = AccountModel(
             account_id=account.account_id,
             email=account.email,
+            phone_number=account.phone_number,
             full_name=account.full_name,
             password_hash=password_hash,
             created_at=account.created_at,
@@ -55,6 +69,9 @@ class DatabaseStore:
 
     def get_account_by_email(self, email: str) -> AccountModel | None:
         return self.db.query(AccountModel).filter(AccountModel.email == email).first()
+
+    def get_account_by_phone(self, phone_number: str) -> AccountModel | None:
+        return self.db.query(AccountModel).filter(AccountModel.phone_number == phone_number).first()
 
     def get_account_by_id(self, account_id: str) -> AccountRecord | None:
         row = self.db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
@@ -76,6 +93,59 @@ class DatabaseStore:
 
     def get_account_session_by_hash(self, token_hash: str) -> AccountSessionModel | None:
         return self.db.query(AccountSessionModel).filter(AccountSessionModel.token_hash == token_hash).first()
+
+    def create_phone_verification(
+        self,
+        account_id: str | None,
+        phone_number: str,
+        code_hash: str,
+        full_name: str | None,
+        delivery_channel: str,
+        expires_at: datetime,
+    ) -> AccountPhoneVerificationModel:
+        row = AccountPhoneVerificationModel(
+            verification_id=new_id("pvc"),
+            account_id=account_id,
+            phone_number=phone_number,
+            code_hash=code_hash,
+            full_name=full_name,
+            delivery_channel=delivery_channel,
+            expires_at=expires_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return row
+
+    def get_latest_phone_verification(
+        self,
+        phone_number: str,
+        account_id: str | None = None,
+    ) -> AccountPhoneVerificationModel | None:
+        query = self.db.query(AccountPhoneVerificationModel).filter(AccountPhoneVerificationModel.phone_number == phone_number)
+        if account_id is not None:
+            query = query.filter(AccountPhoneVerificationModel.account_id == account_id)
+        return query.order_by(AccountPhoneVerificationModel.created_at.desc()).first()
+
+    def consume_phone_verification(self, verification_id: str) -> None:
+        row = (
+            self.db.query(AccountPhoneVerificationModel)
+            .filter(AccountPhoneVerificationModel.verification_id == verification_id)
+            .first()
+        )
+        if not row:
+            return
+        row.consumed_at = datetime.now(timezone.utc)
+        self.db.commit()
+
+    def update_account_phone_number(self, account_id: str, phone_number: str | None) -> AccountRecord | None:
+        row = self.db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
+        if not row:
+            return None
+        row.phone_number = phone_number
+        self.db.commit()
+        self.db.refresh(row)
+        return AccountRecord.model_validate(row)
 
     def create_wallet_link_challenge(
         self,
@@ -345,21 +415,29 @@ class DatabaseStore:
                     "id": existing.id,
                     "name": existing.name,
                     "description": existing.description,
+                    "policy_schema_version": getattr(existing, "policy_schema_version", POLICY_SCHEMA_VERSION),
                     "policy_hash": existing.policy_hash,
                     "rules": existing.rules,
+                    "risk_categories": getattr(existing, "risk_categories", []) or [],
+                    "budget_config": getattr(existing, "budget_config", {}) or {},
+                    "required_approvers": getattr(existing, "required_approvers", []) or [],
                     "created_at": existing.created_at,
                 })
 
         payload_data = payload.model_dump()
-        policy_hash = canonical_hash(payload_data)
+        policy_hash = canonical_hash(payload.canonical_hash_payload())
         policy = Policy(**payload_data, policy_hash=policy_hash)
 
         row = PolicyModel(
             id=policy.id,
             name=policy.name,
             description=policy.description,
+            policy_schema_version=policy.policy_schema_version,
             policy_hash=policy.policy_hash,
             rules=policy.rules.model_dump(),
+            risk_categories=policy.risk_categories,
+            budget_config=policy.budget_config.model_dump(exclude_none=False),
+            required_approvers=policy.required_approvers,
             created_at=policy.created_at,
             idempotency_key=idempotency_key,
         )
@@ -376,10 +454,34 @@ class DatabaseStore:
             "id": row.id,
             "name": row.name,
             "description": row.description,
+            "policy_schema_version": getattr(row, "policy_schema_version", POLICY_SCHEMA_VERSION),
             "policy_hash": row.policy_hash,
             "rules": row.rules,
+            "risk_categories": getattr(row, "risk_categories", []) or [],
+            "budget_config": getattr(row, "budget_config", {}) or {},
+            "required_approvers": getattr(row, "required_approvers", []) or [],
             "created_at": row.created_at,
         })
+
+    def list_all_policies(self, limit: int = 50, offset: int = 0) -> list[Policy]:
+        rows = (
+            self.db.query(PolicyModel)
+            .order_by(PolicyModel.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return [
+            Policy.model_validate({
+                "id": r.id,
+                "name": r.name,
+                "description": r.description,
+                "policy_hash": r.policy_hash,
+                "rules": r.rules,
+                "created_at": r.created_at,
+            })
+            for r in rows
+        ]
 
     def append_audit(self, audit: AuditRecord) -> None:
         row = AuditRecordModel(
@@ -395,6 +497,7 @@ class DatabaseStore:
             http_method=audit.http_method,
             resource=audit.resource,
             amount_usd=audit.amount_usd,
+            reasoning_trace=audit.reasoning_trace,
             action_hash=audit.action_hash,
             policy_hash=audit.policy_hash,
             proof_id=audit.proof_id,
@@ -474,6 +577,7 @@ class DatabaseStore:
                 "http_method": row.http_method,
                 "resource": row.resource,
                 "amount_usd": row.amount_usd,
+                "reasoning_trace": row.reasoning_trace,
                 "action_hash": row.action_hash,
                 "policy_hash": row.policy_hash,
                 "proof_id": row.proof_id,
@@ -485,9 +589,80 @@ class DatabaseStore:
             for row in rows
         ]
 
+    def get_audit_stats(self, policy_id: str, policy: Policy | None = None) -> AuditStatsResponse:
+        rows = self.db.query(AuditRecordModel).filter(AuditRecordModel.policy_id == policy_id).all()
+        total = len(rows)
+        allowed = sum(1 for r in rows if r.status.value == "allowed")
+        blocked = sum(1 for r in rows if r.status.value == "blocked")
+        anchored = sum(1 for r in rows if r.receipt_status.value == "anchored")
+        total_spend = sum((r.amount_usd or 0) for r in rows if r.status.value == "allowed")
+        max_spend = policy.rules.max_spend_usd if policy else None
+        remaining = (max_spend - total_spend) if max_spend is not None else None
+        return AuditStatsResponse(
+            policy_id=policy_id,
+            total_requests=total,
+            allowed_requests=allowed,
+            blocked_requests=blocked,
+            anchored_receipts=anchored,
+            total_spend_usd=round(total_spend, 4),
+            policy_max_spend_usd=max_spend,
+            remaining_credit_usd=round(remaining, 4) if remaining is not None else None,
+        )
+
     def get_requests_in_last_minute(self, policy_id: str) -> int:
         one_minute_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
         return self.db.query(AuditRecordModel).filter(
             AuditRecordModel.policy_id == policy_id,
             AuditRecordModel.created_at >= one_minute_ago,
         ).count()
+
+    # ── Agent Identity ─────────────────────────────────────────────────────
+
+    def create_agent(self, payload: CreateAgentRequest, account_id: str) -> AgentRecord:
+        agent = AgentRecord(
+            account_id=account_id,
+            name=payload.name,
+            wallet_address=payload.wallet_address,
+            description=payload.description,
+        )
+        row = AgentModel(
+            agent_id=agent.agent_id,
+            account_id=agent.account_id,
+            name=agent.name,
+            wallet_address=agent.wallet_address,
+            description=agent.description,
+            created_at=agent.created_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return AgentRecord.model_validate(row)
+
+    def list_agents_for_account(self, account_id: str) -> list[AgentRecord]:
+        rows = (
+            self.db.query(AgentModel)
+            .filter(AgentModel.account_id == account_id)
+            .order_by(AgentModel.created_at.desc())
+            .all()
+        )
+        return [AgentRecord.model_validate(row) for row in rows]
+
+    def get_agent_by_id(self, agent_id: str, account_id: str) -> AgentRecord | None:
+        row = (
+            self.db.query(AgentModel)
+            .filter(AgentModel.agent_id == agent_id, AgentModel.account_id == account_id)
+            .first()
+        )
+        return AgentRecord.model_validate(row) if row else None
+
+    def delete_agent(self, agent_id: str, account_id: str) -> bool:
+        row = (
+            self.db.query(AgentModel)
+            .filter(AgentModel.agent_id == agent_id, AgentModel.account_id == account_id)
+            .first()
+        )
+        if not row:
+            return False
+        self.db.delete(row)
+        self.db.commit()
+        return True

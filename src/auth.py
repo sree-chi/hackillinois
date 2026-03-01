@@ -112,6 +112,16 @@ def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def generate_phone_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_phone_verification_code(phone_number: str, code: str) -> str:
+    secret = os.getenv("PHONE_CODE_SECRET", "sentinel-phone-code-secret")
+    payload = f"{phone_number}:{code}:{secret}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 120000)

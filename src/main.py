@@ -13,11 +13,14 @@ from sqlalchemy.orm import Session
 from src.auth import (
     api_key_prefix,
     generate_api_key,
+    generate_phone_verification_code,
     generate_session_token,
     hash_api_key,
+    hash_phone_verification_code,
     hash_password,
     hash_session_token,
     normalize_email,
+    normalize_phone_number,
     verify_account_session,
     verify_admin_key,
     verify_api_key,
@@ -28,14 +31,18 @@ from src.models import (
     AccountDashboardResponse,
     AccountSessionResponse,
     AgentIntentRequest,
+    AgentRecord,
     AuditRecord,
     AuditStatus,
+    AuditStatsResponse,
     AccountRecord,
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
+    CreateAgentRequest,
     LinkedWalletRecord,
     LoginAccountRequest,
+    PhoneCodeChallengeResponse,
     PublicApiOverview,
     CreatePolicyRequest,
     ErrorEnvelope,
@@ -43,7 +50,9 @@ from src.models import (
     IssueApiKeyResponse,
     RegisterAccountRequest,
     ReceiptStatus,
+    RequestPhoneCodeRequest,
     SafetyViolation,
+    VerifyPhoneCodeRequest,
     VerifyProofRequest,
     VerifyProofResult,
     UpdatePolicyRequest,
@@ -55,6 +64,7 @@ from src.models import (
     new_id,
 )
 from src.solana import SolanaVerificationError, receipt_service
+from src.sms import SmsDeliveryError, SmsSender
 from src.store import DatabaseStore
 
 logging.basicConfig(
@@ -66,6 +76,7 @@ logger = logging.getLogger("SentinelAuth")
 HIGH_RISK_AMOUNT_USD = float(os.getenv("HIGH_RISK_AMOUNT_USD", "1000"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 ACCOUNT_SESSION_TTL_SECONDS = int(os.getenv("ACCOUNT_SESSION_TTL_SECONDS", "86400"))
+PHONE_VERIFICATION_TTL_SECONDS = int(os.getenv("PHONE_VERIFICATION_TTL_SECONDS", "600"))
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
@@ -74,6 +85,7 @@ ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+sms_sender = SmsSender()
 
 
 def ensure_runtime_schema_compatibility() -> None:
@@ -102,9 +114,41 @@ def ensure_runtime_schema_compatibility() -> None:
             statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_policies_idempotency_key ON policies (idempotency_key)")
         else:
             statements.append("ALTER TABLE policies ADD COLUMN idempotency_key VARCHAR")
+    if "policy_schema_version" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append(
+                "ALTER TABLE policies ADD COLUMN IF NOT EXISTS policy_schema_version VARCHAR(50) NOT NULL DEFAULT 'sentinel-policy/v1'"
+            )
+        else:
+            statements.append(
+                "ALTER TABLE policies ADD COLUMN policy_schema_version VARCHAR(50) NOT NULL DEFAULT 'sentinel-policy/v1'"
+            )
+    if "risk_categories" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS risk_categories JSONB NOT NULL DEFAULT '[]'::jsonb")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN risk_categories JSON NOT NULL DEFAULT '[]'")
+    if "budget_config" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS budget_config JSONB NOT NULL DEFAULT '{}'::jsonb")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN budget_config JSON NOT NULL DEFAULT '{}'")
+    if "required_approvers" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS required_approvers JSONB NOT NULL DEFAULT '[]'::jsonb")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN required_approvers JSON NOT NULL DEFAULT '[]'")
 
     if not statements:
         pass
+
+    if "audit_records" in table_names:
+        audit_columns = {column["name"] for column in inspector.get_columns("audit_records")}
+        if "reasoning_trace" not in audit_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS reasoning_trace TEXT")
+            else:
+                statements.append("ALTER TABLE audit_records ADD COLUMN reasoning_trace TEXT")
 
     if "api_clients" in table_names:
         api_client_columns = {column["name"] for column in inspector.get_columns("api_clients")}
@@ -113,6 +157,22 @@ def ensure_runtime_schema_compatibility() -> None:
                 statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP WITH TIME ZONE")
             else:
                 statements.append("ALTER TABLE api_clients ADD COLUMN suspended_at DATETIME")
+
+    if "accounts" in table_names:
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+        if "phone_number" not in account_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20)")
+            else:
+                statements.append("ALTER TABLE accounts ADD COLUMN phone_number VARCHAR(20)")
+
+    if "account_phone_verifications" in table_names:
+        verification_columns = {column["name"] for column in inspector.get_columns("account_phone_verifications")}
+        if "account_id" not in verification_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE account_phone_verifications ADD COLUMN IF NOT EXISTS account_id VARCHAR")
+            else:
+                statements.append("ALTER TABLE account_phone_verifications ADD COLUMN account_id VARCHAR")
 
     if not statements:
         return
@@ -264,6 +324,107 @@ def login_account(payload: LoginAccountRequest, request: Request, db: Session = 
         )
     account = AccountRecord.model_validate(account_row)
     return build_session_response(account, request, store)
+
+
+@app.post("/v1/accounts/me/phone-2fa/request-code", response_model=PhoneCodeChallengeResponse, status_code=status.HTTP_201_CREATED)
+def request_phone_code(
+    payload: RequestPhoneCodeRequest,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    try:
+        phone_number = normalize_phone_number(payload.phone_number)
+    except ValueError as exc:
+        raise error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_PHONE_NUMBER",
+            message=str(exc),
+        ) from exc
+
+    existing_account = store.get_account_by_phone(phone_number)
+    if existing_account and existing_account.account_id != account.account_id:
+        raise error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="PHONE_ALREADY_IN_USE",
+            message="This phone number is already verified on another account.",
+        )
+
+    code = generate_phone_verification_code()
+    try:
+        delivery = sms_sender.send_verification_code(phone_number, code)
+    except SmsDeliveryError as exc:
+        raise error_response(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            code="SMS_DELIVERY_FAILED",
+            message=str(exc),
+        ) from exc
+
+    verification = store.create_phone_verification(
+        account_id=account.account_id,
+        phone_number=phone_number,
+        code_hash=hash_phone_verification_code(phone_number, code),
+        full_name=account.full_name,
+        delivery_channel=str(delivery["delivery_channel"]),
+        expires_at=expires_at(PHONE_VERIFICATION_TTL_SECONDS),
+    )
+    return PhoneCodeChallengeResponse(
+        phone_number=phone_number,
+        expires_at=verification.expires_at,
+        delivery_channel=str(delivery["delivery_channel"]),
+        dev_code=delivery["dev_code"],
+    )
+
+
+@app.post("/v1/accounts/me/phone-2fa/verify-code", response_model=AccountRecord)
+def verify_phone_code(
+    payload: VerifyPhoneCodeRequest,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    try:
+        phone_number = normalize_phone_number(payload.phone_number)
+    except ValueError as exc:
+        raise error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_PHONE_NUMBER",
+            message=str(exc),
+        ) from exc
+
+    verification = store.get_latest_phone_verification(phone_number, account.account_id)
+    if not verification or verification.consumed_at is not None:
+        raise error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="INVALID_CODE",
+            message="No active verification code was found for this phone number.",
+        )
+
+    verification_expires_at = verification.expires_at
+    if verification_expires_at.tzinfo is None:
+        verification_expires_at = verification_expires_at.replace(tzinfo=timezone.utc)
+    if verification_expires_at <= datetime.now(timezone.utc):
+        raise error_response(
+            status_code=status.HTTP_410_GONE,
+            code="CODE_EXPIRED",
+            message="The verification code has expired.",
+        )
+    if verification.code_hash != hash_phone_verification_code(phone_number, payload.code.strip()):
+        raise error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="INVALID_CODE",
+            message="The verification code is invalid.",
+        )
+
+    store.consume_phone_verification(verification.verification_id)
+    updated_account = store.update_account_phone_number(account.account_id, phone_number)
+    if not updated_account:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="ACCOUNT_NOT_FOUND",
+            message="Account was not found.",
+        )
+    return updated_account
 
 
 @app.get("/v1/accounts/me", response_model=AccountRecord)
@@ -657,11 +818,9 @@ def list_policies(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    raise error_response(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        code="POLICY_LIST_UNAVAILABLE",
-        message="Policy listing is temporarily unavailable in this build.",
-    )
+    store = DatabaseStore(db)
+    policies = store.list_all_policies(limit=limit, offset=offset)
+    return {"data": [p.model_dump(mode="json") for p in policies]}
 
 
 @app.get("/v1/policies/{policy_id}", dependencies=[Depends(verify_api_key)])
@@ -909,6 +1068,7 @@ def authorize(
         http_method=method,
         resource=payload.action.resource,
         amount_usd=payload.action.amount_usd,
+        reasoning_trace=payload.reasoning_trace,
         action_hash=action_hash,
         policy_hash=policy.policy_hash,
         proof_id=proof.proof_id if proof else None,
@@ -1106,7 +1266,74 @@ def list_audits(
             message="The requested policy does not exist.",
             policy_id=policy_id,
         )
+    audits = store.list_audits(policy_id, status_filter, created_after)
+    # Enrich each audit with a Solana Explorer URL derived from receipt_signature
+    audit_dicts = []
+    for audit in audits:
+        d = audit.model_dump()
+        if audit.receipt_signature and not audit.receipt_signature.startswith("mock_"):
+            d["explorer_url"] = receipt_service.explorer_url_for_signature(audit.receipt_signature)
+        else:
+            d["explorer_url"] = None
+        audit_dicts.append(d)
     return {
         "policy_id": policy_id,
-        "data": [audit.model_dump() for audit in store.list_audits(policy_id, status_filter, created_after)],
+        "data": audit_dicts,
     }
+
+
+@app.get("/v1/audits/{policy_id}/stats", dependencies=[Depends(verify_api_key)], response_model=AuditStatsResponse)
+def get_audit_stats(
+    policy_id: str,
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    policy = store.get_policy(policy_id)
+    if not policy:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="POLICY_NOT_FOUND",
+            message="The requested policy does not exist.",
+            policy_id=policy_id,
+        )
+    return store.get_audit_stats(policy_id, policy)
+
+
+# ────────────────────────────────────────────────────────────────
+# Agent Identity
+# ────────────────────────────────────────────────────────────────
+
+@app.post("/v1/agents", response_model=AgentRecord, status_code=status.HTTP_201_CREATED)
+def create_agent(
+    payload: CreateAgentRequest,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return store.create_agent(payload, account_id=account.account_id)
+
+
+@app.get("/v1/agents", response_model=list[AgentRecord])
+def list_agents(
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return store.list_agents_for_account(account.account_id)
+
+
+@app.delete("/v1/agents/{agent_id}", status_code=status.HTTP_200_OK)
+def delete_agent(
+    agent_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    deleted = store.delete_agent(agent_id, account.account_id)
+    if not deleted:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="AGENT_NOT_FOUND",
+            message="The requested agent does not exist.",
+        )
+    return {"status": "success", "agent_id": agent_id}

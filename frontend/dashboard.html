@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="page-shell">
         <main class="layout">
@@ -16,8 +20,8 @@
                 <a class="brand-link" href="/">Sentinel Auth</a>
                 <div class="topbar-links">
                     <a class="topbar-link" href="/">Login</a>
-                    <a class="topbar-link topbar-link-active" href="/dashboard.html">Dashboard</a>
-                    <a class="topbar-link" href="/activity.html">Activity Feed</a>
+                    <a class="topbar-link topbar-link-active" href="/dashboard.html">Keys</a>
+                    <a class="topbar-link" href="/activity.html">Dashboard</a>
                     <a class="topbar-link" href="/agent.html">Agent Demo</a>
                 </div>
             </nav>
@@ -28,7 +32,8 @@
                         <div>
                             <p class="eyebrow">Dashboard</p>
                             <h1>Your Sentinel workspace for keys, policies, and verification tests.</h1>
-                            <p id="session-meta" class="hero-copy">Account session active. You can issue and manage API keys from this dashboard.</p>
+                            <p id="session-meta" class="hero-copy">Account session active. You can issue and manage API
+                                keys from this dashboard.</p>
                         </div>
                         <div class="dashboard-hero-actions">
                             <div class="output-card compact-card">
@@ -43,10 +48,38 @@
                 <section class="grid">
                     <section class="panel">
                         <div class="section-heading">
+                            <p class="eyebrow">Security</p>
+                            <h2>Phone verification</h2>
+                        </div>
+                        <p class="muted">Optional 2FA setup. Verify a phone number on your account so you can use it as an additional security contact.</p>
+                        <div class="output-card">
+                            <h3>Current status</h3>
+                            <code id="phone-2fa-summary">No verified phone number.</code>
+                            <p id="phone-2fa-status" class="muted">Request a code, then confirm it here. In mock mode the code is shown in the status message.</p>
+                        </div>
+                        <form id="phone-2fa-form" class="stack">
+                            <label>
+                                <span>Phone number</span>
+                                <input id="phone-2fa-number" type="tel" placeholder="+1 555 555 5555" required>
+                            </label>
+                            <div class="action-row">
+                                <button id="phone-2fa-request-button" class="btn btn-secondary" type="button">Send code</button>
+                                <button id="phone-2fa-verify-button" class="btn btn-primary" type="submit">Verify code</button>
+                            </div>
+                            <label>
+                                <span>Verification code</span>
+                                <input id="phone-2fa-code" type="text" inputmode="numeric" placeholder="6-digit code" minlength="4" maxlength="12" required>
+                            </label>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
                             <p class="eyebrow">Account</p>
                             <h2>Issued API keys</h2>
                         </div>
-                        <p class="muted">Each key is associated with your account. The plaintext value is only shown when a key is created.</p>
+                        <p class="muted">Each key is associated with your account. The plaintext value is only shown
+                            when a key is created.</p>
                         <div id="api-key-list" class="dashboard-list">
                             <div class="empty-state">No keys issued yet.</div>
                         </div>
@@ -68,9 +101,11 @@
                             </label>
                             <label>
                                 <span>Use case</span>
-                                <textarea id="use-case" rows="4" placeholder="Describe what your AI agents will manage."></textarea>
+                                <textarea id="use-case" rows="4"
+                                    placeholder="Describe what your AI agents will manage."></textarea>
                             </label>
-                            <button id="issue-key-button" class="btn btn-primary" type="submit" disabled>Issue API key</button>
+                            <button id="issue-key-button" class="btn btn-primary" type="submit" disabled>Issue API
+                                key</button>
                         </form>
 
                         <div class="output-card">
@@ -90,10 +125,13 @@
                             <p class="eyebrow">Solana</p>
                             <h2>Linked wallets</h2>
                         </div>
-                        <p class="muted">Connect Phantom to link a real Solana wallet to this account. The dashboard will load its balance and recent transaction record.</p>
+                        <p class="muted">Connect Phantom to link a real Solana wallet to this account. The dashboard
+                            will load its balance and recent transaction record.</p>
                         <div class="action-row">
-                            <button id="connect-wallet-button" class="btn btn-secondary" type="button" disabled>Connect Phantom</button>
-                            <button id="refresh-wallet-button" class="btn btn-ghost" type="button" disabled>Refresh wallet</button>
+                            <button id="connect-wallet-button" class="btn btn-secondary" type="button" disabled>Connect
+                                Phantom</button>
+                            <button id="refresh-wallet-button" class="btn btn-ghost" type="button" disabled>Refresh
+                                wallet</button>
                         </div>
                         <div id="wallet-status" class="muted">No wallet linked yet.</div>
                         <div id="wallet-list" class="dashboard-list">
@@ -127,7 +165,8 @@
                         <div class="output-card">
                             <div class="output-header">
                                 <h3>Recent transactions</h3>
-                                <button id="unlink-wallet-button" class="btn btn-ghost" type="button" disabled>Unlink selected wallet</button>
+                                <button id="unlink-wallet-button" class="btn btn-ghost" type="button" disabled>Unlink
+                                    selected wallet</button>
                             </div>
                             <div id="wallet-transaction-list" class="dashboard-list">
                                 <div class="empty-state">Link a wallet to load recent transactions.</div>
@@ -147,7 +186,8 @@
                                 <h3>cURL</h3>
                                 <button id="copy-curl-button" class="btn btn-ghost" type="button" disabled>Copy</button>
                             </div>
-                            <pre id="curl-snippet" class="snippet">Issue a key to generate a ready-to-run cURL example.</pre>
+                            <pre id="curl-snippet"
+                                class="snippet">Issue a key to generate a ready-to-run cURL example.</pre>
                         </div>
                         <div class="snippet-group">
                             <div class="snippet-header">
@@ -178,15 +218,18 @@
                             </label>
                         </div>
                         <div class="action-row">
-                            <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create starter policy</button>
-                            <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample authorize</button>
+                            <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create
+                                starter policy</button>
+                            <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample
+                                authorize</button>
                         </div>
                         <div class="output-card">
                             <h3>Current policy</h3>
                             <code id="policy-id-label">No policy created yet.</code>
-                            <p class="muted">Open the Activity Feed to inspect receipts, blocked requests, and verification messages.</p>
+                            <p class="muted">Open the Dashboard to inspect receipts, blocked requests, and verification
+                                messages.</p>
                             <div class="action-row">
-                                <a class="btn btn-ghost" href="/activity.html">Open activity feed</a>
+                                <a class="btn btn-ghost" href="/activity.html">Open Dashboard</a>
                             </div>
                         </div>
                     </section>
@@ -205,4 +248,5 @@
 
     <script type="module" src="/dashboard.js"></script>
 </body>
+
 </html>

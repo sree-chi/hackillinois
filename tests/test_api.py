@@ -95,20 +95,28 @@ def issue_public_key() -> str:
     return response.json()["api_key"]
 
 
-def test_register_account_returns_session():
-    response = client.post(
-        "/v1/accounts/register",
+def test_account_can_verify_phone_number_after_login():
+    session_token = create_account_session()
+    request_code = client.post(
+        "/v1/accounts/me/phone-2fa/request-code",
+        headers={"Authorization": f"Bearer {session_token}"},
         json={
-            "email": "founder@example.com",
-            "password": "strong-password-123",
-            "full_name": "Founder",
+            "phone_number": "(312) 555-0199",
+        },
+    )
+    assert request_code.status_code == 201
+    response = client.post(
+        "/v1/accounts/me/phone-2fa/verify-code",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "phone_number": "(312) 555-0199",
+            "code": request_code.json()["dev_code"],
         },
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 200
     body = response.json()
-    assert body["session_token"].startswith("ssa_live_")
-    assert body["account"]["email"] == "founder@example.com"
+    assert body["phone_number"] == "+13125550199"
 
 
 def test_account_dashboard_lists_issued_keys():
@@ -350,6 +358,97 @@ def test_create_policy_is_idempotent():
     assert first.status_code == 201
     assert second.status_code == 201
     assert first.json()["id"] == second.json()["id"]
+
+
+def test_policy_hash_is_deterministic_for_canonical_equivalents():
+    first = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Treasury control policy",
+            "description": "First render",
+            "rules": {
+                "allowed_http_methods": ["POST", "GET"],
+                "max_spend_usd": 5000,
+                "trusted_executors": ["billing-api", "settlement-worker"],
+                "trusted_origins": ["agent-router", "risk-engine"],
+                "requires_human_approval_for_delete": True,
+            },
+            "risk_categories": ["payments", "treasury", "payments"],
+            "budget_config": {
+                "period": "monthly",
+                "warning_threshold_usd": 3500,
+                "max_total_spend_usd": 5000,
+                "currency": "USD",
+            },
+            "required_approvers": ["finance-lead", "ops-manager"],
+        },
+    )
+    second = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Treasury control policy v2",
+            "description": "Same semantics, different ordering",
+            "rules": {
+                "trusted_origins": ["risk-engine", "agent-router"],
+                "requires_human_approval_for_delete": True,
+                "trusted_executors": ["settlement-worker", "billing-api"],
+                "max_spend_usd": 5000,
+                "allowed_http_methods": ["GET", "POST"],
+            },
+            "risk_categories": ["treasury", "payments"],
+            "budget_config": {
+                "currency": "USD",
+                "max_total_spend_usd": 5000,
+                "warning_threshold_usd": 3500,
+                "period": "monthly",
+            },
+            "required_approvers": ["ops-manager", "finance-lead"],
+        },
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["policy_hash"] == second.json()["policy_hash"]
+    assert first.json()["policy_schema_version"] == "sentinel-policy/v1"
+
+
+def test_policy_hash_changes_when_budget_or_approvers_change():
+    baseline = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Baseline policy",
+            "rules": {"allowed_http_methods": ["GET", "POST"]},
+            "risk_categories": ["payments"],
+            "budget_config": {
+                "currency": "USD",
+                "max_total_spend_usd": 1000,
+                "period": "monthly",
+            },
+            "required_approvers": ["finance-lead"],
+        },
+    )
+    changed = client.post(
+        "/v1/policies",
+        headers={"Authorization": "Bearer default-dev-key"},
+        json={
+            "name": "Changed policy",
+            "rules": {"allowed_http_methods": ["GET", "POST"]},
+            "risk_categories": ["payments", "vendor-risk"],
+            "budget_config": {
+                "currency": "USD",
+                "max_total_spend_usd": 2000,
+                "period": "monthly",
+            },
+            "required_approvers": ["finance-lead", "cfo"],
+        },
+    )
+
+    assert baseline.status_code == 201
+    assert changed.status_code == 201
+    assert baseline.json()["policy_hash"] != changed.json()["policy_hash"]
 
 
 def test_authorize_allows_valid_request():
