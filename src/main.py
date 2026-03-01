@@ -28,12 +28,15 @@ from src.models import (
     AccountDashboardResponse,
     AccountSessionResponse,
     AgentIntentRequest,
+    AgentRecord,
     AuditRecord,
     AuditStatus,
+    AuditStatsResponse,
     AccountRecord,
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
+    CreateAgentRequest,
     LinkedWalletRecord,
     LoginAccountRequest,
     PublicApiOverview,
@@ -105,6 +108,14 @@ def ensure_runtime_schema_compatibility() -> None:
 
     if not statements:
         pass
+
+    if "audit_records" in table_names:
+        audit_columns = {column["name"] for column in inspector.get_columns("audit_records")}
+        if "reasoning_trace" not in audit_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS reasoning_trace TEXT")
+            else:
+                statements.append("ALTER TABLE audit_records ADD COLUMN reasoning_trace TEXT")
 
     if "api_clients" in table_names:
         api_client_columns = {column["name"] for column in inspector.get_columns("api_clients")}
@@ -909,6 +920,7 @@ def authorize(
         http_method=method,
         resource=payload.action.resource,
         amount_usd=payload.action.amount_usd,
+        reasoning_trace=payload.reasoning_trace,
         action_hash=action_hash,
         policy_hash=policy.policy_hash,
         proof_id=proof.proof_id if proof else None,
@@ -1106,7 +1118,74 @@ def list_audits(
             message="The requested policy does not exist.",
             policy_id=policy_id,
         )
+    audits = store.list_audits(policy_id, status_filter, created_after)
+    # Enrich each audit with a Solana Explorer URL derived from receipt_signature
+    audit_dicts = []
+    for audit in audits:
+        d = audit.model_dump()
+        if audit.receipt_signature and not audit.receipt_signature.startswith("mock_"):
+            d["explorer_url"] = receipt_service.explorer_url_for_signature(audit.receipt_signature)
+        else:
+            d["explorer_url"] = None
+        audit_dicts.append(d)
     return {
         "policy_id": policy_id,
-        "data": [audit.model_dump() for audit in store.list_audits(policy_id, status_filter, created_after)],
+        "data": audit_dicts,
     }
+
+
+@app.get("/v1/audits/{policy_id}/stats", dependencies=[Depends(verify_api_key)], response_model=AuditStatsResponse)
+def get_audit_stats(
+    policy_id: str,
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    policy = store.get_policy(policy_id)
+    if not policy:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="POLICY_NOT_FOUND",
+            message="The requested policy does not exist.",
+            policy_id=policy_id,
+        )
+    return store.get_audit_stats(policy_id, policy)
+
+
+# ────────────────────────────────────────────────────────────────
+# Agent Identity
+# ────────────────────────────────────────────────────────────────
+
+@app.post("/v1/agents", response_model=AgentRecord, status_code=status.HTTP_201_CREATED)
+def create_agent(
+    payload: CreateAgentRequest,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return store.create_agent(payload, account_id=account.account_id)
+
+
+@app.get("/v1/agents", response_model=list[AgentRecord])
+def list_agents(
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return store.list_agents_for_account(account.account_id)
+
+
+@app.delete("/v1/agents/{agent_id}", status_code=status.HTTP_200_OK)
+def delete_agent(
+    agent_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    deleted = store.delete_agent(agent_id, account.account_id)
+    if not deleted:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="AGENT_NOT_FOUND",
+            message="The requested agent does not exist.",
+        )
+    return {"status": "success", "agent_id": agent_id}

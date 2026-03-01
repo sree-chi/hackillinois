@@ -50,6 +50,7 @@ class AuditRecordModel(Base):
     http_method = Column(String, nullable=False)
     resource = Column(String, nullable=False)
     amount_usd = Column(Float, nullable=True)
+    reasoning_trace = Column(String, nullable=True)
     action_hash = Column(String(64), nullable=True, index=True)
     policy_hash = Column(String(64), nullable=True, index=True)
     proof_id = Column(String, nullable=True, index=True)
@@ -59,9 +60,8 @@ class AuditRecordModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        Index("ix_audit_policy_created", "policy_id", "created_at"), 
-        Index("ix_audit_request_created", "policy_id", "status", "created_at")
-        
+        Index("ix_audit_policy_created", "policy_id", "created_at"),
+        Index("ix_audit_request_created", "policy_id", "status", "created_at"),
     )
 
 
@@ -160,3 +160,18 @@ class AccountApiClientModel(Base):
     account_id = Column(String, nullable=False, index=True)
     client_id = Column(String, nullable=False, unique=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AgentModel(Base):
+    __tablename__ = "agents"
+
+    agent_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    wallet_address = Column(String(120), nullable=True, index=True)
+    description = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_agents_account_created", "account_id", "created_at"),
+    )

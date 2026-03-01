@@ -1,4 +1,4 @@
-// ── State ──────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────
 const STORAGE_KEYS = {
     apiBase: "sentinel.apiBase",
     apiKey: "sentinel.apiKey",
@@ -24,7 +24,7 @@ function resolveApiBase() {
     return isLocalhost ? "http://localhost:8000" : `${origin}/server`;
 }
 
-// ── DOM refs ───────────────────────────────────────────────────────────────
+// ── DOM refs ──────────────────────────────────────────────────────────────
 const cfgApiKey = document.getElementById("cfg-api-key");
 const cfgPolicyId = document.getElementById("cfg-policy-id");
 const loadBtn = document.getElementById("load-btn");
@@ -35,28 +35,32 @@ const ksConfirmBtn = document.getElementById("ks-confirm-btn");
 const accountChip = document.getElementById("account-chip");
 const toastStack = document.getElementById("toast-stack");
 
+// Stats
 const statTotal = document.getElementById("stat-total");
 const statAllowed = document.getElementById("stat-allowed");
 const statBlocked = document.getElementById("stat-blocked");
 const statAnchored = document.getElementById("stat-anchored");
 const statSpend = document.getElementById("stat-spend");
 
+// Budget
 const budgetBar = document.getElementById("budget-bar");
 const budgetSpent = document.getElementById("budget-spent");
 const budgetLimit = document.getElementById("budget-limit");
 const budgetSub = document.getElementById("budget-sub");
 const budgetRemLabel = document.getElementById("budget-remaining-label");
 
+// Agents
 const agentList = document.getElementById("agent-list");
 const agentCount = document.getElementById("agent-count");
 const newAgentName = document.getElementById("new-agent-name");
 const newAgentWallet = document.getElementById("new-agent-wallet");
 const addAgentBtn = document.getElementById("add-agent-btn");
 
+// Audit
 const auditFeed = document.getElementById("audit-feed");
 const auditCount = document.getElementById("audit-count");
 
-// ── Utilities ──────────────────────────────────────────────────────────────
+// ── Utilities ─────────────────────────────────────────────────────────────
 function esc(val) {
     return String(val ?? "")
         .replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -67,18 +71,17 @@ async function apiFetch(path, opts = {}) {
     const url = `${STATE.apiBase}${path}`;
     const res = await fetch(url, opts);
     const ct = res.headers.get("content-type") || "";
-    const body = ct.includes("application/json")
-        ? await res.json()
-        : { message: await res.text() };
-    if (!res.ok) {
-        const msg = body?.detail?.error?.message || body?.detail || body?.message || JSON.stringify(body);
-        throw Object.assign(new Error(msg), { status: res.status });
-    }
+    const body = ct.includes("application/json") ? await res.json() : { message: await res.text() };
+    if (!res.ok) throw Object.assign(new Error(body?.detail?.error?.message || body?.message || JSON.stringify(body)), { status: res.status });
     return body;
 }
 
-function apiHeaders() { return { Authorization: `Bearer ${STATE.apiKey}`, "Content-Type": "application/json" }; }
-function sessionHeaders() { return { Authorization: `Bearer ${STATE.sessionToken}`, "Content-Type": "application/json" }; }
+function apiHeaders() {
+    return { Authorization: `Bearer ${STATE.apiKey}`, "Content-Type": "application/json" };
+}
+function sessionHeaders() {
+    return { Authorization: `Bearer ${STATE.sessionToken}`, "Content-Type": "application/json" };
+}
 
 function toast(msg, type = "info") {
     const el = document.createElement("div");
@@ -88,9 +91,9 @@ function toast(msg, type = "info") {
     setTimeout(() => el.remove(), 3800);
 }
 
-function fmt(val, dec = 0) {
+function fmt(val, decimals = 2) {
     if (val === null || val === undefined) return "—";
-    return Number(val).toLocaleString("en-US", { maximumFractionDigits: dec });
+    return Number(val).toLocaleString("en-US", { maximumFractionDigits: decimals });
 }
 
 function fmtUSD(val) {
@@ -108,41 +111,39 @@ function timeAgo(isoStr) {
     return new Date(isoStr).toLocaleDateString();
 }
 
-// ── Account / Session ──────────────────────────────────────────────────────
+// ── Load session / account ─────────────────────────────────────────────────
 async function loadAccountInfo() {
     if (!STATE.sessionToken) return;
     try {
-        const data = await apiFetch("/v1/accounts/me/dashboard", {
-            headers: { Authorization: `Bearer ${STATE.sessionToken}` },
-        });
+        const data = await apiFetch("/v1/accounts/me/dashboard", { headers: { Authorization: `Bearer ${STATE.sessionToken}` } });
         STATE.account = data.account;
         STATE.apiKeys = data.api_keys || [];
         accountChip.textContent = STATE.account.email;
-        const hasActive = STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
-        killSwitchBtn.disabled = !hasActive;
+        killSwitchBtn.disabled = STATE.apiKeys.filter(k => !k.revoked_at && !k.suspended_at).length === 0;
     } catch { /* session may have expired */ }
 }
 
-// ── Stats ──────────────────────────────────────────────────────────────────
+// ── Stats ─────────────────────────────────────────────────────────────────
 async function loadStats() {
     const data = await apiFetch(`/v1/audits/${STATE.policyId}/stats`, { headers: apiHeaders() });
-    statTotal.textContent = fmt(data.total_requests);
-    statAllowed.textContent = fmt(data.allowed_requests);
-    statBlocked.textContent = fmt(data.blocked_requests);
-    statAnchored.textContent = fmt(data.anchored_receipts);
+    statTotal.textContent = fmt(data.total_requests, 0);
+    statAllowed.textContent = fmt(data.allowed_requests, 0);
+    statBlocked.textContent = fmt(data.blocked_requests, 0);
+    statAnchored.textContent = fmt(data.anchored_receipts, 0);
     statSpend.textContent = fmtUSD(data.total_spend_usd);
 
+    // Budget bar
     const spent = data.total_spend_usd || 0;
     const max = data.policy_max_spend_usd;
+    const remaining = data.remaining_credit_usd;
     budgetSpent.textContent = fmtUSD(spent);
-
     if (max !== null && max !== undefined) {
         const pct = Math.min(100, (spent / max) * 100);
         budgetLimit.textContent = `/ ${fmtUSD(max)} limit`;
         budgetBar.style.width = `${pct}%`;
         budgetBar.className = "progress-fill" + (pct >= 90 ? " danger" : pct >= 70 ? " warning" : "");
         budgetSub.textContent = `${fmt(pct, 1)}% of policy budget consumed`;
-        budgetRemLabel.textContent = `${fmtUSD(data.remaining_credit_usd)} remaining`;
+        budgetRemLabel.textContent = `${fmtUSD(remaining)} remaining`;
     } else {
         budgetLimit.textContent = "/ No spend limit set";
         budgetBar.style.width = "0%";
@@ -154,21 +155,16 @@ async function loadStats() {
 // ── Agents ─────────────────────────────────────────────────────────────────
 async function loadAgents() {
     if (!STATE.sessionToken) return;
-    try {
-        STATE.agents = await apiFetch("/v1/agents", {
-            headers: { Authorization: `Bearer ${STATE.sessionToken}` },
-        });
-    } catch { STATE.agents = []; }
+    STATE.agents = await apiFetch("/v1/agents", { headers: { Authorization: `Bearer ${STATE.sessionToken}` } });
     renderAgents();
 }
 
 function agentIsActive(agent) {
+    // An agent is "active" if it made a request in the last 5 minutes
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
     return STATE.allAudits.some(a => {
         const matchWallet = agent.wallet_address && a.agent_wallet === agent.wallet_address;
-        const matchName = a.requester?.toLowerCase().includes(
-            agent.name.toLowerCase().replace(/\s+/g, "_")
-        );
+        const matchName = a.requester && a.requester.includes(agent.name.toLowerCase().replace(/\s+/g, "_"));
         return (matchWallet || matchName) && new Date(a.created_at).getTime() > fiveMinAgo;
     });
 }
@@ -179,29 +175,30 @@ function renderAgents() {
         agentList.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">🤖</div>
-                No agents registered yet. Add one above to link a wallet to a named identity.
+                No agents registered. Add one above to link a wallet address to a named identity.
             </div>`;
         return;
     }
-    agentList.innerHTML = STATE.agents.map(a => {
-        const active = agentIsActive(a);
+
+    agentList.innerHTML = STATE.agents.map(agent => {
+        const active = agentIsActive(agent);
         return `
         <div class="agent-row">
             <div class="agent-status-dot ${active ? "dot-active" : "dot-idle"}"></div>
             <div class="agent-info">
-                <div class="agent-name">${esc(a.name)}</div>
-                <div class="agent-wallet">${a.wallet_address ? esc(a.wallet_address) : "No wallet linked"}</div>
+                <div class="agent-name">${esc(agent.name)}</div>
+                <div class="agent-wallet">${agent.wallet_address ? esc(agent.wallet_address) : "No wallet linked"}</div>
             </div>
-            <button class="btn-sm btn-sm-danger" data-delete-agent="${esc(a.agent_id)}">Remove</button>
+            <button class="btn-sm btn-sm-danger" data-delete-agent="${esc(agent.agent_id)}">Remove</button>
         </div>`;
     }).join("");
 }
 
-document.getElementById("add-agent-btn").addEventListener("click", async () => {
+addAgentBtn.addEventListener("click", async () => {
     const name = newAgentName.value.trim();
     const wallet = newAgentWallet.value.trim() || null;
     if (!name) { toast("Agent name is required.", "error"); return; }
-    if (!STATE.sessionToken) { toast("You must be signed in to register agents.", "error"); return; }
+    if (!STATE.sessionToken) { toast("Sign in to register agents.", "error"); return; }
     addAgentBtn.disabled = true;
     try {
         await apiFetch("/v1/agents", {
@@ -220,9 +217,10 @@ document.getElementById("add-agent-btn").addEventListener("click", async () => {
 agentList.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-delete-agent]");
     if (!btn) return;
+    const id = btn.dataset.deleteAgent;
     btn.disabled = true;
     try {
-        await apiFetch(`/v1/agents/${btn.dataset.deleteAgent}`, { method: "DELETE", headers: sessionHeaders() });
+        await apiFetch(`/v1/agents/${id}`, { method: "DELETE", headers: sessionHeaders() });
         await loadAgents();
         toast("Agent removed.", "info");
     } catch (err) {
@@ -246,30 +244,43 @@ function verifyBadge(audit) {
 }
 
 function renderAuditCard(audit) {
-    const isAllowed = audit.status === "allowed";
-    const receiptBadgeClass = audit.receipt_status === "anchored" ? "badge-anchored" : "badge-pending";
+    const statusClass = audit.status === "allowed" ? "allowed" : "blocked";
+    const badgeClass = audit.status === "allowed" ? "badge-allowed" : "badge-blocked";
+    const receiptBadge = audit.receipt_status === "anchored" ? "badge-anchored" : "badge-pending";
 
     const traceHtml = audit.reasoning_trace
-        ? `<div class="audit-trace">💬 ${esc(audit.reasoning_trace)}</div>` : "";
+        ? `<div class="audit-trace">💬 ${esc(audit.reasoning_trace)}</div>`
+        : "";
 
     const violationHtml = audit.violation?.explanation
-        ? `<div class="audit-violation">⛔ ${esc(audit.violation.explanation)}</div>` : "";
+        ? `<div class="audit-trace" style="border-left-color: var(--ent-red); background: rgba(239,68,68,0.06);">
+               ⛔ ${esc(audit.violation.explanation)}
+           </div>`
+        : "";
 
     const solanaLink = audit.explorer_url
-        ? `<a class="solana-link" href="${esc(audit.explorer_url)}" target="_blank" rel="noreferrer">🔗 View on Solana Explorer ↗</a>` : "";
+        ? `<a class="solana-link" href="${esc(audit.explorer_url)}" target="_blank" rel="noreferrer">
+               🔗 View on Solana Explorer ↗
+           </a>`
+        : "";
 
-    const sigShort = audit.receipt_signature ? audit.receipt_signature.substring(0, 22) + "…" : "None";
-    const hashShort = audit.action_hash ? audit.action_hash.substring(0, 16) + "…" : "None";
+    const sigShort = audit.receipt_signature
+        ? audit.receipt_signature.substring(0, 20) + "…"
+        : "None";
+    const hashShort = audit.action_hash
+        ? audit.action_hash.substring(0, 16) + "…"
+        : "None";
 
     return `
-    <div class="audit-card ${isAllowed ? "allowed" : "blocked"}">
+    <div class="audit-card ${statusClass}">
         <div class="audit-top">
             <div class="audit-action">
-                ${esc(audit.action_type)}<span>${esc(audit.http_method)} ${esc(audit.resource)}</span>
+                ${esc(audit.action_type)}
+                <span>${esc(audit.http_method)} ${esc(audit.resource)}</span>
             </div>
-            <div style="display:flex;gap:0.35rem;align-items:center;flex-shrink:0;">
+            <div style="display:flex; gap:0.4rem; align-items:center; flex-shrink:0;">
                 ${verifyBadge(audit)}
-                <span class="status-badge ${isAllowed ? "badge-allowed" : "badge-blocked"}">${esc(audit.status)}</span>
+                <span class="status-badge ${badgeClass}">${esc(audit.status)}</span>
             </div>
         </div>
         <div class="audit-meta">
@@ -278,20 +289,29 @@ function renderAuditCard(audit) {
             <span>${timeAgo(audit.created_at)}</span>
             ${audit.amount_usd != null ? `<span class="sep">·</span><span>${fmtUSD(audit.amount_usd)}</span>` : ""}
             <span class="sep">·</span>
-            <span class="status-badge ${receiptBadgeClass}">${esc(audit.receipt_status)}</span>
+            <span class="status-badge ${receiptBadge}">${esc(audit.receipt_status)}</span>
         </div>
-        ${traceHtml}${violationHtml}
+        ${traceHtml}
+        ${violationHtml}
         <div class="audit-grid">
             <div class="audit-kv">
                 <span class="audit-kv-label">Action Hash</span>
                 <span class="audit-kv-value" title="${esc(audit.action_hash || "")}">${esc(hashShort)}</span>
             </div>
             <div class="audit-kv">
-                <span class="audit-kv-label">Solana Sig</span>
+                <span class="audit-kv-label">Solana Signature</span>
                 <span class="audit-kv-value" title="${esc(audit.receipt_signature || "")}">${esc(sigShort)}</span>
             </div>
-            ${audit.agent_wallet ? `<div class="audit-kv"><span class="audit-kv-label">Agent Wallet</span><span class="audit-kv-value">${esc(audit.agent_wallet.substring(0, 16))}…</span></div>` : ""}
-            ${audit.proof_id ? `<div class="audit-kv"><span class="audit-kv-label">Proof ID</span><span class="audit-kv-value">${esc(audit.proof_id)}</span></div>` : ""}
+            ${audit.agent_wallet ? `
+            <div class="audit-kv">
+                <span class="audit-kv-label">Agent Wallet</span>
+                <span class="audit-kv-value">${esc(audit.agent_wallet.substring(0, 16))}…</span>
+            </div>` : ""}
+            ${audit.proof_id ? `
+            <div class="audit-kv">
+                <span class="audit-kv-label">Proof ID</span>
+                <span class="audit-kv-value">${esc(audit.proof_id)}</span>
+            </div>` : ""}
         </div>
         ${solanaLink}
     </div>`;
@@ -299,14 +319,16 @@ function renderAuditCard(audit) {
 
 function renderAuditFeed() {
     let audits = [...STATE.allAudits].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const f = STATE.currentFilter;
-    if (f === "allowed") audits = audits.filter(a => a.status === "allowed");
-    if (f === "blocked") audits = audits.filter(a => a.status === "blocked");
-    if (f === "anchored") audits = audits.filter(a => a.receipt_status === "anchored");
+    const filter = STATE.currentFilter;
+    if (filter === "allowed") audits = audits.filter(a => a.status === "allowed");
+    if (filter === "blocked") audits = audits.filter(a => a.status === "blocked");
+    if (filter === "anchored") audits = audits.filter(a => a.receipt_status === "anchored");
 
-    auditFeed.innerHTML = audits.length
-        ? audits.map(renderAuditCard).join("")
-        : `<div class="empty-state"><div class="empty-icon">🔍</div>No events match this filter.</div>`;
+    if (!audits.length) {
+        auditFeed.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div>No events match this filter.</div>`;
+        return;
+    }
+    auditFeed.innerHTML = audits.map(renderAuditCard).join("");
 }
 
 // Filter chips
@@ -319,16 +341,19 @@ document.querySelectorAll(".filter-chip").forEach(chip => {
     });
 });
 
-// ── Kill Switch ────────────────────────────────────────────────────────────
-killSwitchBtn.addEventListener("click", () => ksOverlay.classList.add("open"));
+// ── Kill Switch ─────────────────────────────────────────────────────────────
+killSwitchBtn.addEventListener("click", () => {
+    ksOverlay.classList.add("open");
+});
 ksCancelBtn.addEventListener("click", () => ksOverlay.classList.remove("open"));
-ksOverlay.addEventListener("click", e => { if (e.target === ksOverlay) ksOverlay.classList.remove("open"); });
+ksOverlay.addEventListener("click", (e) => { if (e.target === ksOverlay) ksOverlay.classList.remove("open"); });
 
 ksConfirmBtn.addEventListener("click", async () => {
     ksOverlay.classList.remove("open");
     ksConfirmBtn.disabled = true;
     const activeKeys = STATE.apiKeys.filter(k => !k.revoked_at && !k.suspended_at);
-    let suspended = 0, failed = 0;
+    let suspended = 0;
+    let failed = 0;
     for (const key of activeKeys) {
         try {
             await apiFetch(`/v1/accounts/me/keys/${key.client_id}/suspend`, {
@@ -338,19 +363,23 @@ ksConfirmBtn.addEventListener("click", async () => {
             suspended++;
         } catch { failed++; }
     }
-    toast(`Kill switch: ${suspended} key${suspended !== 1 ? "s" : ""} suspended${failed ? `, ${failed} failed` : ""}.`,
-        failed ? "error" : "success");
+    toast(
+        `Kill switch: ${suspended} key${suspended !== 1 ? "s" : ""} suspended${failed ? `, ${failed} failed` : ""}.`,
+        failed ? "error" : "success"
+    );
     killSwitchBtn.disabled = true;
     ksConfirmBtn.disabled = false;
     await loadAccountInfo();
 });
 
-// ── Load All ───────────────────────────────────────────────────────────────
+// ── Load All ──────────────────────────────────────────────────────────────
 async function loadDashboard() {
     const apiKey = cfgApiKey.value.trim();
     const policyId = cfgPolicyId.value.trim();
-    if (!apiKey || !policyId) { toast("API key and Policy ID are both required.", "error"); return; }
-
+    if (!apiKey || !policyId) {
+        toast("Both API key and Policy ID are required.", "error");
+        return;
+    }
     STATE.apiKey = apiKey;
     STATE.policyId = policyId;
     localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
@@ -358,10 +387,14 @@ async function loadDashboard() {
 
     loadBtn.disabled = true;
     loadBtn.textContent = "Loading…";
+
     try {
-        await Promise.all([loadStats(), loadAudits()]);
+        await Promise.all([
+            loadStats(),
+            loadAudits(),
+        ]);
         await loadAgents();
-        toast("Dashboard loaded.", "success");
+        toast("Dashboard loaded successfully.", "success");
     } catch (err) {
         toast(`Load failed: ${err.message}`, "error");
     } finally {
@@ -372,10 +405,15 @@ async function loadDashboard() {
 
 loadBtn.addEventListener("click", loadDashboard);
 
-// ── Init ───────────────────────────────────────────────────────────────────
+// ── Restore + init ────────────────────────────────────────────────────────
 (async function init() {
     cfgApiKey.value = STATE.apiKey;
     cfgPolicyId.value = STATE.policyId;
+
     await loadAccountInfo();
-    if (STATE.apiKey && STATE.policyId) loadDashboard();
+
+    // Auto-load if we have credentials
+    if (STATE.apiKey && STATE.policyId) {
+        loadDashboard();
+    }
 })();

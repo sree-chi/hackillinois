@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func as sql_func
 from sqlalchemy.orm import Session
 
 from src.db_models import (
@@ -10,6 +11,7 @@ from src.db_models import (
     AccountSessionModel,
     AccountWalletLinkChallengeModel,
     AccountWalletModel,
+    AgentModel,
     ApiClientModel,
     AuditRecordModel,
     AuditStatusEnum,
@@ -21,9 +23,12 @@ from src.models import (
     AccountApiKeySummary,
     AccountRecord,
     AccountSessionRecord,
+    AgentRecord,
     ApiClientRecord,
     AuditRecord,
+    AuditStatsResponse,
     AuthorizationProof,
+    CreateAgentRequest,
     CreatePolicyRequest,
     IssueApiKeyRequest,
     LinkedWalletRecord,
@@ -395,6 +400,7 @@ class DatabaseStore:
             http_method=audit.http_method,
             resource=audit.resource,
             amount_usd=audit.amount_usd,
+            reasoning_trace=audit.reasoning_trace,
             action_hash=audit.action_hash,
             policy_hash=audit.policy_hash,
             proof_id=audit.proof_id,
@@ -474,6 +480,7 @@ class DatabaseStore:
                 "http_method": row.http_method,
                 "resource": row.resource,
                 "amount_usd": row.amount_usd,
+                "reasoning_trace": row.reasoning_trace,
                 "action_hash": row.action_hash,
                 "policy_hash": row.policy_hash,
                 "proof_id": row.proof_id,
@@ -485,9 +492,80 @@ class DatabaseStore:
             for row in rows
         ]
 
+    def get_audit_stats(self, policy_id: str, policy: Policy | None = None) -> AuditStatsResponse:
+        rows = self.db.query(AuditRecordModel).filter(AuditRecordModel.policy_id == policy_id).all()
+        total = len(rows)
+        allowed = sum(1 for r in rows if r.status.value == "allowed")
+        blocked = sum(1 for r in rows if r.status.value == "blocked")
+        anchored = sum(1 for r in rows if r.receipt_status.value == "anchored")
+        total_spend = sum((r.amount_usd or 0) for r in rows if r.status.value == "allowed")
+        max_spend = policy.rules.max_spend_usd if policy else None
+        remaining = (max_spend - total_spend) if max_spend is not None else None
+        return AuditStatsResponse(
+            policy_id=policy_id,
+            total_requests=total,
+            allowed_requests=allowed,
+            blocked_requests=blocked,
+            anchored_receipts=anchored,
+            total_spend_usd=round(total_spend, 4),
+            policy_max_spend_usd=max_spend,
+            remaining_credit_usd=round(remaining, 4) if remaining is not None else None,
+        )
+
     def get_requests_in_last_minute(self, policy_id: str) -> int:
         one_minute_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
         return self.db.query(AuditRecordModel).filter(
             AuditRecordModel.policy_id == policy_id,
             AuditRecordModel.created_at >= one_minute_ago,
         ).count()
+
+    # ── Agent Identity ─────────────────────────────────────────────────────
+
+    def create_agent(self, payload: CreateAgentRequest, account_id: str) -> AgentRecord:
+        agent = AgentRecord(
+            account_id=account_id,
+            name=payload.name,
+            wallet_address=payload.wallet_address,
+            description=payload.description,
+        )
+        row = AgentModel(
+            agent_id=agent.agent_id,
+            account_id=agent.account_id,
+            name=agent.name,
+            wallet_address=agent.wallet_address,
+            description=agent.description,
+            created_at=agent.created_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return AgentRecord.model_validate(row)
+
+    def list_agents_for_account(self, account_id: str) -> list[AgentRecord]:
+        rows = (
+            self.db.query(AgentModel)
+            .filter(AgentModel.account_id == account_id)
+            .order_by(AgentModel.created_at.desc())
+            .all()
+        )
+        return [AgentRecord.model_validate(row) for row in rows]
+
+    def get_agent_by_id(self, agent_id: str, account_id: str) -> AgentRecord | None:
+        row = (
+            self.db.query(AgentModel)
+            .filter(AgentModel.agent_id == agent_id, AgentModel.account_id == account_id)
+            .first()
+        )
+        return AgentRecord.model_validate(row) if row else None
+
+    def delete_agent(self, agent_id: str, account_id: str) -> bool:
+        row = (
+            self.db.query(AgentModel)
+            .filter(AgentModel.agent_id == agent_id, AgentModel.account_id == account_id)
+            .first()
+        )
+        if not row:
+            return False
+        self.db.delete(row)
+        self.db.commit()
+        return True

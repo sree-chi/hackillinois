@@ -187,6 +187,7 @@ class AuditRecord(BaseModel):
     http_method: str
     resource: str
     amount_usd: float | None = None
+    reasoning_trace: str | None = None
     action_hash: str | None = None
     policy_hash: str | None = None
     proof_id: str | None = None
@@ -344,3 +345,31 @@ class AccountDashboardResponse(BaseModel):
     account: AccountRecord
     api_keys: list[AccountApiKeySummary]
     linked_wallets: list[LinkedWalletRecord] = Field(default_factory=list)
+
+
+class CreateAgentRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    wallet_address: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class AgentRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    agent_id: str = Field(default_factory=lambda: new_id("agt"))
+    account_id: str
+    name: str
+    wallet_address: str | None = None
+    description: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class AuditStatsResponse(BaseModel):
+    policy_id: str
+    total_requests: int
+    allowed_requests: int
+    blocked_requests: int
+    anchored_receipts: int
+    total_spend_usd: float
+    remaining_credit_usd: float | None = None
+    policy_max_spend_usd: float | None = None
