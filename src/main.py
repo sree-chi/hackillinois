@@ -235,6 +235,32 @@ async def lifespan(app: FastAPI):
     if str(engine.url) != "sqlite:///:memory:":
         Base.metadata.create_all(bind=engine)
         ensure_runtime_schema_compatibility()
+        # Unconditional safety net: always ensure the api pricing table exists
+        with engine.begin() as conn:
+            dialect = engine.dialect.name
+            if dialect == "postgresql":
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS account_api_pricing (
+                        id SERIAL PRIMARY KEY,
+                        client_id VARCHAR NOT NULL,
+                        api_link VARCHAR(500) NOT NULL,
+                        price_per_call_usd FLOAT NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        CONSTRAINT uq_api_pricing_client_api UNIQUE (client_id, api_link)
+                    )
+                """))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_pricing_client ON account_api_pricing (client_id)"))
+            else:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS account_api_pricing (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        client_id VARCHAR NOT NULL,
+                        api_link VARCHAR(500) NOT NULL,
+                        price_per_call_usd FLOAT NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE (client_id, api_link)
+                    )
+                """))
     yield
 
 
