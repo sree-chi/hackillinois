@@ -3,7 +3,7 @@ const backdropTitle = document.querySelector("[data-background-title]");
 
 if (canvas) {
     const ctx = canvas.getContext("2d");
-    const PARTICLE_COUNT = 280;
+    const PARTICLE_COUNT = 420;
     const pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, active: false };
     const particles = [];
     let canvasWidth = 0;
