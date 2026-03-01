@@ -4,422 +4,124 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sentinel Auth — Governance</title>
+    <title>Sentinel Auth Dashboard</title>
     <meta name="description"
         content="Enterprise Governance Dashboard — monitor agent activity, budgets, and audit trails backed by Solana." />
+    <link rel="stylesheet" href="styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
         rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css" />
     <style>
-        :root {
-            --ent-bg: #0a0c12;
-            --ent-surface: #111420;
-            --ent-surface-2: #171b2a;
-            --ent-border: rgba(99, 102, 241, 0.18);
-            --ent-accent: #6366f1;
-            --ent-accent-dim: rgba(99, 102, 241, 0.12);
-            --ent-green: #10b981;
-            --ent-red: #ef4444;
-            --ent-amber: #f59e0b;
-            --ent-text: #e2e8f0;
-            --ent-muted: #64748b;
-            --ent-glow: 0 0 40px rgba(99, 102, 241, 0.15);
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--ent-bg);
-            color: var(--ent-text);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* ── TopBar ── */
-        .topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 2rem;
-            height: 60px;
-            border-bottom: 1px solid var(--ent-border);
-            background: rgba(10, 12, 18, 0.97);
-            backdrop-filter: blur(12px);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .topbar-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-weight: 700;
-            font-size: 1.05rem;
-            letter-spacing: -0.01em;
-            text-decoration: none;
-            color: var(--ent-text);
-        }
-
-        .sentinel-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--ent-accent);
-            box-shadow: 0 0 8px var(--ent-accent);
-            animation: pulse-dot 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse-dot {
-
-            0%,
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 0.6;
-                transform: scale(0.85);
-            }
-        }
-
-        .topbar-nav {
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-        }
-
-        .topbar-nav a {
-            color: var(--ent-muted);
-            text-decoration: none;
-            font-size: 0.85rem;
-            padding: 0.4rem 0.75rem;
-            border-radius: 6px;
-            transition: color 0.15s, background 0.15s;
-        }
-
-        .topbar-nav a:hover {
-            color: var(--ent-text);
-            background: var(--ent-accent-dim);
-        }
-
-        .topbar-nav a.active {
-            color: var(--ent-text);
-            background: var(--ent-accent-dim);
-        }
-
-        .topbar-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .kill-switch-btn {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.45rem 1rem;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            color: #ef4444;
-            border-radius: 8px;
-            font-size: 0.82rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: inherit;
-        }
-
-        .kill-switch-btn:hover:not(:disabled) {
-            background: rgba(239, 68, 68, 0.2);
-            border-color: #ef4444;
-            box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
-        }
-
-        .kill-switch-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        #account-chip {
-            font-size: 0.8rem;
-            color: var(--ent-muted);
-            padding: 0.35rem 0.75rem;
-            background: var(--ent-surface-2);
-            border: 1px solid var(--ent-border);
-            border-radius: 20px;
-        }
-
-        /* ── Layout ── */
-        .page-wrapper {
-            display: flex;
-            flex: 1;
-        }
-
-        .sidebar {
-            width: 210px;
-            min-height: calc(100vh - 60px);
-            border-right: 1px solid var(--ent-border);
-            padding: 1.5rem 1rem;
-            background: rgba(17, 20, 32, 0.6);
-            flex-shrink: 0;
-        }
-
-        .sidebar-section {
-            margin-bottom: 1.5rem;
-        }
-
-        .sidebar-label {
-            font-size: 0.68rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--ent-muted);
-            margin-bottom: 0.5rem;
-            padding-left: 0.5rem;
-        }
-
-        .sidebar-link {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            padding: 0.5rem 0.6rem;
-            border-radius: 7px;
-            color: var(--ent-muted);
-            text-decoration: none;
-            font-size: 0.85rem;
-            transition: all 0.15s;
-            margin-bottom: 0.1rem;
-        }
-
-        .sidebar-link:hover {
-            color: var(--ent-text);
-            background: var(--ent-accent-dim);
-        }
-
-        .sidebar-link.active {
-            color: var(--ent-text);
-            background: var(--ent-accent-dim);
-        }
-
-        .main-content {
-            flex: 1;
-            padding: 2rem;
-            overflow-y: auto;
-        }
-
-        /* ── Config banner ── */
-        .config-banner {
-            background: var(--ent-surface);
-            border: 1px solid var(--ent-border);
-            border-radius: 12px;
-            padding: 1.25rem 1.5rem;
-            margin-bottom: 2rem;
-            display: flex;
-            align-items: flex-end;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .config-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.35rem;
-            flex: 1;
-            min-width: 160px;
-        }
-
-        .config-group label {
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--ent-muted);
-        }
-
-        .config-input {
-            background: var(--ent-surface-2);
-            border: 1px solid var(--ent-border);
-            color: var(--ent-text);
-            padding: 0.5rem 0.75rem;
-            border-radius: 7px;
-            font-size: 0.85rem;
-            font-family: 'JetBrains Mono', monospace;
-            outline: none;
-            transition: border-color 0.15s;
-            width: 100%;
-        }
-
-        .config-input:focus {
-            border-color: var(--ent-accent);
-        }
-
-        .load-btn {
-            padding: 0.55rem 1.25rem;
-            background: var(--ent-accent);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.15s, transform 0.1s;
-            white-space: nowrap;
-            font-family: inherit;
-            height: fit-content;
-        }
-
-        .load-btn:hover:not(:disabled) {
-            opacity: 0.88;
-            transform: translateY(-1px);
-        }
-
-        .load-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        /* ── Stats row ── */
-        .stats-grid {
+        /* ── Governance-specific styles (warm theme) ── */
+        .gov-stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 14px;
         }
 
-        .stat-card {
-            background: var(--ent-surface);
-            border: 1px solid var(--ent-border);
-            border-radius: 12px;
-            padding: 1.1rem 1.25rem;
+        .gov-stat-card {
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.56);
+            border-radius: 18px;
+            padding: 18px 20px;
             position: relative;
             overflow: hidden;
-            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .stat-card::before {
+        .gov-stat-card::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            background: var(--stat-color, var(--ent-accent));
-            opacity: 0.7;
+            height: 3px;
+            background: var(--stat-accent, var(--primary));
         }
 
-        .stat-card:hover {
-            border-color: var(--ent-accent);
-            box-shadow: var(--ent-glow);
-        }
-
-        .stat-label {
-            font-size: 0.7rem;
+        .gov-stat-label {
+            font-size: 0.78rem;
             text-transform: uppercase;
-            letter-spacing: 0.07em;
-            color: var(--ent-muted);
-            margin-bottom: 0.5rem;
+            letter-spacing: 0.12em;
+            color: var(--muted);
+            margin-bottom: 8px;
         }
 
-        .stat-value {
-            font-size: 1.7rem;
+        .gov-stat-value {
+            font-size: 2rem;
             font-weight: 700;
             line-height: 1;
-            color: var(--stat-color, var(--ent-text));
+            letter-spacing: -0.04em;
+            color: var(--text);
         }
 
-        .stat-sub {
-            font-size: 0.72rem;
-            color: var(--ent-muted);
-            margin-top: 0.3rem;
+        .gov-stat-sub {
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-top: 6px;
         }
 
-        /* ── Budget bar ── */
-        .budget-card {
-            background: var(--ent-surface);
-            border: 1px solid var(--ent-border);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            transition: box-shadow 0.2s;
-        }
-
-        .budget-card:hover {
-            box-shadow: var(--ent-glow);
+        /* Budget bar */
+        .budget-panel {
+            margin-top: 0;
         }
 
         .budget-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 1rem;
-        }
-
-        .budget-title {
-            font-size: 0.95rem;
-            font-weight: 600;
-        }
-
-        .budget-sub-text {
-            font-size: 0.78rem;
-            color: var(--ent-muted);
-            margin-top: 0.2rem;
+            margin-bottom: 14px;
+            gap: 16px;
         }
 
         .budget-amounts {
             display: flex;
             align-items: baseline;
-            gap: 0.5rem;
+            gap: 8px;
         }
 
-        .budget-spent {
-            font-size: 1.8rem;
+        .budget-spent-value {
+            font-size: 2.2rem;
             font-weight: 700;
+            letter-spacing: -0.04em;
         }
 
-        .budget-limit {
-            font-size: 0.95rem;
-            color: var(--ent-muted);
+        .budget-limit-label {
+            font-size: 1rem;
+            color: var(--muted);
         }
 
         .progress-track {
-            background: var(--ent-surface-2);
+            background: rgba(182, 132, 82, 0.12);
             border-radius: 999px;
-            height: 10px;
+            height: 12px;
             overflow: hidden;
+            border: 1px solid rgba(58, 44, 24, 0.08);
         }
 
         .progress-fill {
             height: 100%;
             border-radius: 999px;
-            background: linear-gradient(90deg, var(--ent-accent), #8b5cf6);
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
             transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
         }
 
         .progress-fill.danger {
-            background: linear-gradient(90deg, #ef4444, #f97316);
+            background: linear-gradient(90deg, #bf573f, #d4764c);
         }
 
         .progress-fill.warning {
-            background: linear-gradient(90deg, #f59e0b, #f97316);
+            background: linear-gradient(90deg, #c99863, #d4764c);
         }
 
         .progress-fill::after {
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 50%, transparent 100%);
-            animation: shimmer 2s infinite;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+            animation: shimmer 2.5s infinite;
         }
 
         @keyframes shimmer {
@@ -434,16 +136,16 @@
 
         .budget-legend {
             display: flex;
-            gap: 1.5rem;
-            margin-top: 0.75rem;
+            gap: 20px;
+            margin-top: 10px;
         }
 
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 0.4rem;
-            font-size: 0.76rem;
-            color: var(--ent-muted);
+            gap: 6px;
+            font-size: 0.82rem;
+            color: var(--muted);
         }
 
         .legend-dot {
@@ -452,129 +154,73 @@
             border-radius: 50%;
         }
 
-        /* ── Two col ── */
-        .two-col {
+        /* Two-column layout */
+        .gov-two-col {
             display: grid;
             grid-template-columns: 1fr 1.7fr;
-            gap: 1.5rem;
+            gap: 24px;
         }
 
-        @media (max-width: 860px) {
-            .two-col {
+        @media (max-width: 960px) {
+            .gov-two-col {
                 grid-template-columns: 1fr;
             }
         }
 
-        .panel {
-            background: var(--ent-surface);
-            border: 1px solid var(--ent-border);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        .panel-head {
+        .gov-panel-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0.9rem 1.1rem;
-            border-bottom: 1px solid var(--ent-border);
+            margin-bottom: 14px;
         }
 
-        .panel-title {
-            font-size: 0.88rem;
+        .gov-panel-badge {
+            font-size: 0.78rem;
+            padding: 6px 12px;
+            background: rgba(182, 132, 82, 0.12);
+            border: 1px solid rgba(182, 132, 82, 0.18);
+            border-radius: 999px;
+            color: var(--primary-dark);
             font-weight: 600;
         }
 
-        .panel-badge {
-            font-size: 0.7rem;
-            padding: 0.2rem 0.55rem;
-            background: var(--ent-accent-dim);
-            border: 1px solid var(--ent-border);
-            border-radius: 99px;
-            color: var(--ent-accent);
-        }
-
-        .panel-body {
-            padding: 1rem 1.1rem;
+        .gov-panel-body {
             max-height: 520px;
             overflow-y: auto;
         }
 
-        .panel-body::-webkit-scrollbar {
-            width: 4px;
+        .gov-panel-body::-webkit-scrollbar {
+            width: 5px;
         }
 
-        .panel-body::-webkit-scrollbar-track {
+        .gov-panel-body::-webkit-scrollbar-track {
             background: transparent;
         }
 
-        .panel-body::-webkit-scrollbar-thumb {
-            background: var(--ent-border);
-            border-radius: 2px;
+        .gov-panel-body::-webkit-scrollbar-thumb {
+            background: rgba(58, 44, 24, 0.15);
+            border-radius: 3px;
         }
 
-        /* ── Agent panel ── */
+        /* Agent panel */
         .agent-add-row {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
+            gap: 8px;
+            margin-bottom: 14px;
         }
 
         .agent-add-row input {
             flex: 1;
-            background: var(--ent-surface-2);
-            border: 1px solid var(--ent-border);
-            color: var(--ent-text);
-            padding: 0.4rem 0.65rem;
-            border-radius: 7px;
-            font-size: 0.82rem;
-            font-family: inherit;
-            outline: none;
+            padding: 10px 14px;
             min-width: 0;
-        }
-
-        .agent-add-row input:focus {
-            border-color: var(--ent-accent);
-        }
-
-        .btn-sm {
-            padding: 0.4rem 0.8rem;
-            border-radius: 7px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            transition: all 0.15s;
-            font-family: inherit;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        .btn-sm-primary {
-            background: var(--ent-accent);
-            color: white;
-        }
-
-        .btn-sm-primary:hover:not(:disabled) {
-            opacity: 0.85;
-        }
-
-        .btn-sm-danger {
-            background: rgba(239, 68, 68, 0.12);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        .btn-sm-danger:hover:not(:disabled) {
-            background: rgba(239, 68, 68, 0.22);
         }
 
         .agent-row {
             display: flex;
             align-items: center;
-            gap: 0.6rem;
-            padding: 0.65rem 0;
-            border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--line);
         }
 
         .agent-row:last-child {
@@ -587,152 +233,136 @@
         }
 
         .agent-name {
-            font-size: 0.86rem;
-            font-weight: 600;
+            font-size: 0.95rem;
+            font-weight: 700;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
-        .agent-wallet {
-            font-size: 0.7rem;
-            color: var(--ent-muted);
-            font-family: 'JetBrains Mono', monospace;
+        .agent-wallet-addr {
+            font-size: 0.78rem;
+            color: var(--muted);
+            font-family: 'IBM Plex Mono', monospace;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
         .agent-status-dot {
-            width: 8px;
-            height: 8px;
+            width: 9px;
+            height: 9px;
             border-radius: 50%;
             flex-shrink: 0;
         }
 
         .dot-active {
-            background: var(--ent-green);
-            box-shadow: 0 0 6px var(--ent-green);
+            background: #5d9c3e;
+            box-shadow: 0 0 6px rgba(93, 156, 62, 0.5);
         }
 
         .dot-idle {
-            background: var(--ent-muted);
+            background: var(--muted);
+            opacity: 0.5;
         }
 
-        /* ── Audit feed ── */
+        .btn-remove {
+            border: 1px solid rgba(191, 87, 63, 0.2);
+            background: rgba(191, 87, 63, 0.08);
+            color: #8d3d28;
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+
+        .btn-remove:hover {
+            background: rgba(191, 87, 63, 0.16);
+        }
+
+        /* Audit feed */
         .audit-filters {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 0.75rem;
+            gap: 8px;
+            margin-bottom: 14px;
             flex-wrap: wrap;
         }
 
         .filter-chip {
-            padding: 0.28rem 0.7rem;
-            border-radius: 99px;
-            font-size: 0.74rem;
-            font-weight: 500;
-            border: 1px solid var(--ent-border);
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            border: 1px solid var(--line);
             cursor: pointer;
-            background: transparent;
-            color: var(--ent-muted);
-            transition: all 0.15s;
+            background: rgba(255, 255, 255, 0.42);
+            color: var(--muted);
             font-family: inherit;
+            transition: all 0.15s;
         }
 
         .filter-chip.active-chip {
-            background: var(--ent-accent-dim);
-            border-color: var(--ent-accent);
-            color: var(--ent-accent);
+            background: rgba(182, 132, 82, 0.14);
+            border-color: rgba(182, 132, 82, 0.22);
+            color: var(--primary-dark);
         }
 
         .filter-chip:hover {
-            color: var(--ent-text);
+            color: var(--text);
         }
 
         .audit-card {
-            border: 1px solid var(--ent-border);
-            border-radius: 10px;
-            padding: 0.85rem 0.95rem;
-            margin-bottom: 0.6rem;
-            background: var(--ent-surface-2);
-            transition: border-color 0.15s, transform 0.1s;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            background: rgba(255, 255, 255, 0.68);
+            transition: transform 0.12s;
         }
 
         .audit-card:hover {
-            border-color: var(--ent-accent);
             transform: translateY(-1px);
         }
 
         .audit-card.allowed {
-            border-left: 3px solid var(--ent-green);
+            border-left: 5px solid rgba(93, 156, 62, 0.65);
         }
 
         .audit-card.blocked {
-            border-left: 3px solid var(--ent-red);
+            border-left: 5px solid rgba(191, 87, 63, 0.65);
         }
 
         .audit-top {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 0.4rem;
-            gap: 0.5rem;
+            margin-bottom: 6px;
+            gap: 8px;
         }
 
-        .audit-action {
-            font-size: 0.86rem;
-            font-weight: 600;
-        }
-
-        .audit-action span {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.76rem;
-            color: var(--ent-muted);
-            margin-left: 0.3rem;
-        }
-
-        .status-badge {
-            padding: 0.18rem 0.55rem;
-            border-radius: 99px;
-            font-size: 0.68rem;
+        .audit-action-label {
+            font-size: 0.95rem;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            flex-shrink: 0;
         }
 
-        .badge-allowed {
-            background: rgba(16, 185, 129, 0.12);
-            color: #10b981;
-            border: 1px solid rgba(16, 185, 129, 0.3);
+        .audit-action-label span {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.82rem;
+            color: var(--muted);
+            font-weight: 500;
+            margin-left: 6px;
         }
 
-        .badge-blocked {
-            background: rgba(239, 68, 68, 0.12);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        .badge-anchored {
-            background: rgba(99, 102, 241, 0.12);
-            color: var(--ent-accent);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-        }
-
-        .badge-pending {
-            background: rgba(245, 158, 11, 0.1);
-            color: var(--ent-amber);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-        }
-
-        .audit-meta {
-            font-size: 0.72rem;
-            color: var(--ent-muted);
-            margin-bottom: 0.4rem;
+        .audit-meta-row {
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-bottom: 8px;
             display: flex;
             align-items: center;
-            gap: 0.4rem;
+            gap: 6px;
             flex-wrap: wrap;
         }
 
@@ -740,54 +370,54 @@
             opacity: 0.35;
         }
 
-        .audit-trace {
-            font-size: 0.76rem;
-            color: #94a3b8;
+        .audit-trace-block {
+            font-size: 0.88rem;
+            color: var(--muted);
             font-style: italic;
-            line-height: 1.45;
-            margin-bottom: 0.45rem;
-            padding: 0.4rem 0.6rem;
-            background: rgba(99, 102, 241, 0.06);
-            border-radius: 6px;
-            border-left: 2px solid var(--ent-accent);
+            line-height: 1.55;
+            margin-bottom: 10px;
+            padding: 10px 14px;
+            background: rgba(182, 132, 82, 0.06);
+            border-radius: 14px;
+            border-left: 3px solid var(--primary);
         }
 
-        .audit-violation {
-            font-size: 0.76rem;
-            color: #fca5a5;
+        .audit-violation-block {
+            font-size: 0.88rem;
+            color: #8d3d28;
             font-style: italic;
-            line-height: 1.45;
-            margin-bottom: 0.45rem;
-            padding: 0.4rem 0.6rem;
-            background: rgba(239, 68, 68, 0.06);
-            border-radius: 6px;
-            border-left: 2px solid var(--ent-red);
+            line-height: 1.55;
+            margin-bottom: 10px;
+            padding: 10px 14px;
+            background: rgba(191, 87, 63, 0.06);
+            border-radius: 14px;
+            border-left: 3px solid rgba(191, 87, 63, 0.5);
         }
 
-        .audit-grid {
+        .audit-detail-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 0.3rem 0.6rem;
-            margin-top: 0.4rem;
+            gap: 6px 14px;
+            margin-top: 8px;
         }
 
         .audit-kv {
             display: flex;
             flex-direction: column;
-            gap: 0.08rem;
+            gap: 2px;
         }
 
         .audit-kv-label {
-            font-size: 0.64rem;
+            font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--ent-muted);
+            letter-spacing: 0.1em;
+            color: var(--muted);
         }
 
         .audit-kv-value {
-            font-size: 0.72rem;
-            font-family: 'JetBrains Mono', monospace;
-            color: #94a3b8;
+            font-size: 0.82rem;
+            font-family: 'IBM Plex Mono', monospace;
+            color: var(--text);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -796,63 +426,75 @@
         .solana-link {
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
-            font-size: 0.72rem;
-            color: var(--ent-accent);
+            gap: 4px;
+            font-size: 0.82rem;
+            color: var(--primary-dark);
             text-decoration: none;
-            margin-top: 0.35rem;
-            transition: opacity 0.15s;
+            margin-top: 8px;
+            font-weight: 600;
         }
 
         .solana-link:hover {
-            opacity: 0.75;
             text-decoration: underline;
         }
 
         .verify-check {
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
-            font-size: 0.7rem;
-            font-weight: 600;
-            padding: 0.12rem 0.45rem;
-            border-radius: 99px;
+            gap: 4px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 999px;
         }
 
         .verify-check.ok {
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
+            background: rgba(93, 156, 62, 0.1);
+            color: #4b8732;
+            border: 1px solid rgba(93, 156, 62, 0.2);
         }
 
         .verify-check.fail {
-            background: rgba(239, 68, 68, 0.1);
-            color: #ef4444;
+            background: rgba(191, 87, 63, 0.1);
+            color: #8d3d28;
+            border: 1px solid rgba(191, 87, 63, 0.2);
         }
 
         .verify-check.mock {
-            background: rgba(99, 102, 241, 0.1);
-            color: var(--ent-accent);
+            background: rgba(182, 132, 82, 0.1);
+            color: var(--primary-dark);
+            border: 1px solid rgba(182, 132, 82, 0.2);
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 2.5rem 1rem;
-            color: var(--ent-muted);
-            font-size: 0.84rem;
+        /* Kill switch */
+        .kill-switch-btn {
+            border: 1px solid rgba(191, 87, 63, 0.3);
+            background: rgba(191, 87, 63, 0.08);
+            color: #8d3d28;
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s;
         }
 
-        .empty-icon {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
+        .kill-switch-btn:hover:not(:disabled) {
+            background: rgba(191, 87, 63, 0.16);
         }
 
-        /* ── Kill switch dialog ── */
+        .kill-switch-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
         #ks-confirm-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.72);
-            backdrop-filter: blur(6px);
+            background: rgba(70, 49, 23, 0.26);
+            backdrop-filter: blur(8px);
             z-index: 9999;
             align-items: center;
             justify-content: center;
@@ -863,82 +505,55 @@
         }
 
         .ks-dialog {
-            background: var(--ent-surface);
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            border-radius: 16px;
-            padding: 2rem;
-            max-width: 420px;
-            width: 90%;
-            box-shadow: 0 0 60px rgba(239, 68, 68, 0.2);
+            background: rgba(255, 249, 240, 0.96);
+            border: 1px solid rgba(191, 87, 63, 0.3);
+            border-radius: 28px;
+            padding: 28px;
+            max-width: 440px;
+            width: 92%;
+            box-shadow: 0 24px 60px rgba(46, 29, 10, 0.2);
         }
 
         .ks-dialog h2 {
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-            color: #ef4444;
+            font-size: 1.2rem;
+            margin-bottom: 8px;
+            letter-spacing: -0.03em;
         }
 
         .ks-dialog p {
-            font-size: 0.84rem;
-            color: var(--ent-muted);
-            margin-bottom: 1.25rem;
-            line-height: 1.55;
+            font-size: 0.92rem;
+            color: var(--muted);
+            margin-bottom: 18px;
+            line-height: 1.6;
         }
 
         .ks-dialog-btns {
             display: flex;
-            gap: 0.75rem;
+            gap: 10px;
             justify-content: flex-end;
         }
 
-        .btn-cancel {
-            padding: 0.55rem 1.1rem;
-            background: var(--ent-surface-2);
-            border: 1px solid var(--ent-border);
-            color: var(--ent-text);
-            border-radius: 8px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            font-family: inherit;
-        }
-
-        .btn-kill {
-            padding: 0.55rem 1.1rem;
-            background: #ef4444;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            font-family: inherit;
-            transition: opacity 0.15s;
-        }
-
-        .btn-kill:hover {
-            opacity: 0.88;
-        }
-
-        /* ── Toast ── */
+        /* Toast */
         #toast-stack {
             position: fixed;
-            bottom: 1.5rem;
-            right: 1.5rem;
+            bottom: 24px;
+            right: 24px;
             z-index: 9999;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 8px;
             pointer-events: none;
         }
 
         .toast {
-            padding: 0.65rem 1rem;
-            border-radius: 9px;
-            font-size: 0.82rem;
-            font-weight: 500;
-            max-width: 340px;
+            padding: 12px 18px;
+            border-radius: 18px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            max-width: 360px;
             animation: toast-in 0.25s ease;
             pointer-events: auto;
+            backdrop-filter: blur(12px);
         }
 
         @keyframes toast-in {
@@ -954,135 +569,125 @@
         }
 
         .toast-success {
-            background: rgba(16, 185, 129, 0.15);
-            border: 1px solid rgba(16, 185, 129, 0.4);
-            color: #10b981;
+            background: rgba(93, 156, 62, 0.12);
+            border: 1px solid rgba(93, 156, 62, 0.22);
+            color: #4b8732;
         }
 
         .toast-error {
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            color: #ef4444;
+            background: rgba(191, 87, 63, 0.12);
+            border: 1px solid rgba(191, 87, 63, 0.22);
+            color: #8d3d28;
         }
 
         .toast-info {
-            background: rgba(99, 102, 241, 0.15);
-            border: 1px solid rgba(99, 102, 241, 0.4);
-            color: var(--ent-accent);
+            background: rgba(182, 132, 82, 0.12);
+            border: 1px solid rgba(182, 132, 82, 0.22);
+            color: var(--primary-dark);
         }
     </style>
 </head>
 
 <body>
+    <div class="page-shell">
+        <main class="layout">
+            <!-- Nav -->
+            <nav class="topbar panel">
+                <a class="brand-link" href="/">Sentinel Auth</a>
+                <div class="topbar-links">
+                    <a class="topbar-link" href="/">Login</a>
+                    <a class="topbar-link" href="/dashboard.html">Keys</a>
+                    <a class="topbar-link topbar-link-active" href="/activity.html">Dashboard</a>
+                    <a class="topbar-link" href="/agent.html">Agent Demo</a>
+                </div>
+            </nav>
 
-    <!-- Top Bar -->
-    <header class="topbar">
-        <a class="topbar-brand" href="/">
-            <div class="sentinel-dot"></div>
-            Sentinel Auth
-        </a>
-        <nav class="topbar-nav">
-            <a href="/">Login</a>
-            <a href="/dashboard.html">Dashboard</a>
-            <a href="/activity.html" class="active">Governance</a>
-            <a href="/agent.html">Agent Demo</a>
-        </nav>
-        <div class="topbar-actions">
-            <span id="account-chip">Not signed in</span>
-            <button class="kill-switch-btn" id="kill-switch-btn" disabled>
-                🔴 Kill Switch
-            </button>
-        </div>
-    </header>
-
-    <!-- Kill Switch Dialog -->
-    <div id="ks-confirm-overlay">
-        <div class="ks-dialog">
-            <h2>⚠️ Confirm Kill Switch</h2>
-            <p>This will <strong>suspend all active API keys</strong> for your account, immediately blocking all agent
-                activity. You can restore individual keys from the Dashboard.</p>
-            <div class="ks-dialog-btns">
-                <button class="btn-cancel" id="ks-cancel-btn">Cancel</button>
-                <button class="btn-kill" id="ks-confirm-btn">Suspend All Keys</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast Stack -->
-    <div id="toast-stack"></div>
-
-    <div class="page-wrapper">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-section">
-                <div class="sidebar-label">Governance</div>
-                <a href="#top" class="sidebar-link active">📊 Overview</a>
-                <a href="#budget" class="sidebar-link">💰 Budget</a>
-                <a href="#agents" class="sidebar-link">🤖 Agents</a>
-                <a href="#audit" class="sidebar-link">🔍 Audit Feed</a>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-label">Navigation</div>
-                <a href="/dashboard.html" class="sidebar-link">🗝 Dashboard</a>
-                <a href="/agent.html" class="sidebar-link">✨ Agent Demo</a>
-            </div>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="main-content" id="top">
+            <!-- Hero -->
+            <section class="hero panel">
+                <div class="dashboard-hero-header">
+                    <div>
+                        <p class="eyebrow">Governance Dashboard</p>
+                        <h1>Monitor agents, budgets, and audit trails — all in one place.</h1>
+                        <p class="hero-copy">
+                            Track every authorization receipt, policy violation, and Solana-anchored proof issued by
+                            Sentinel Auth.
+                        </p>
+                    </div>
+                    <div class="dashboard-hero-actions" style="min-width:min(100%,260px)">
+                        <div class="output-card compact-card">
+                            <h3>Account</h3>
+                            <code id="account-chip">Not signed in.</code>
+                        </div>
+                        <button class="kill-switch-btn" id="kill-switch-btn" disabled>🔴 Kill Switch — Freeze All
+                            Keys</button>
+                    </div>
+                </div>
+            </section>
 
             <!-- Config Banner -->
-            <div class="config-banner">
-                <div class="config-group">
-                    <label>API Key</label>
-                    <input type="text" class="config-input" id="cfg-api-key" placeholder="ska_live_…" />
+            <section class="panel">
+                <div class="section-heading">
+                    <p class="eyebrow">Access</p>
+                    <h2>Load a policy feed</h2>
                 </div>
-                <div class="config-group">
-                    <label>Policy ID</label>
-                    <input type="text" class="config-input" id="cfg-policy-id" placeholder="pol_…" />
-                </div>
-                <button class="load-btn" id="load-btn">Load Dashboard</button>
-            </div>
+                <form id="cfg-form" class="stack">
+                    <div class="grid">
+                        <label>
+                            <span>API key</span>
+                            <input id="cfg-api-key" type="text" placeholder="ska_live_…">
+                        </label>
+                        <label>
+                            <span>Policy ID</span>
+                            <input id="cfg-policy-id" type="text" placeholder="pol_…">
+                        </label>
+                    </div>
+                    <div class="action-row">
+                        <button id="load-btn" class="btn btn-primary" type="submit">Load Dashboard</button>
+                    </div>
+                </form>
+            </section>
 
-            <!-- Stats Row -->
-            <div class="stats-grid">
-                <div class="stat-card" style="--stat-color: var(--ent-text)">
-                    <div class="stat-label">Total Requests</div>
-                    <div class="stat-value" id="stat-total">—</div>
-                    <div class="stat-sub">All time</div>
+            <!-- Stats -->
+            <section class="gov-stats-grid">
+                <div class="gov-stat-card" style="--stat-accent: var(--text)">
+                    <div class="gov-stat-label">Total Requests</div>
+                    <div class="gov-stat-value" id="stat-total">—</div>
+                    <div class="gov-stat-sub">All time</div>
                 </div>
-                <div class="stat-card" style="--stat-color: var(--ent-green)">
-                    <div class="stat-label">Allowed</div>
-                    <div class="stat-value" id="stat-allowed">—</div>
-                    <div class="stat-sub">Passed policy</div>
+                <div class="gov-stat-card" style="--stat-accent: #5d9c3e">
+                    <div class="gov-stat-label">Allowed</div>
+                    <div class="gov-stat-value" id="stat-allowed">—</div>
+                    <div class="gov-stat-sub">Passed policy</div>
                 </div>
-                <div class="stat-card" style="--stat-color: var(--ent-red)">
-                    <div class="stat-label">Blocked</div>
-                    <div class="stat-value" id="stat-blocked">—</div>
-                    <div class="stat-sub">Policy violations</div>
+                <div class="gov-stat-card" style="--stat-accent: #bf573f">
+                    <div class="gov-stat-label">Blocked</div>
+                    <div class="gov-stat-value" id="stat-blocked">—</div>
+                    <div class="gov-stat-sub">Policy violations</div>
                 </div>
-                <div class="stat-card" style="--stat-color: var(--ent-accent)">
-                    <div class="stat-label">Anchored</div>
-                    <div class="stat-value" id="stat-anchored">—</div>
-                    <div class="stat-sub">On Solana</div>
+                <div class="gov-stat-card" style="--stat-accent: var(--primary)">
+                    <div class="gov-stat-label">Anchored</div>
+                    <div class="gov-stat-value" id="stat-anchored">—</div>
+                    <div class="gov-stat-sub">On Solana</div>
                 </div>
-                <div class="stat-card" style="--stat-color: var(--ent-amber)">
-                    <div class="stat-label">Total Spend</div>
-                    <div class="stat-value" id="stat-spend">—</div>
-                    <div class="stat-sub">USD (allowed)</div>
+                <div class="gov-stat-card" style="--stat-accent: var(--secondary-dark)">
+                    <div class="gov-stat-label">Total Spend</div>
+                    <div class="gov-stat-value" id="stat-spend">—</div>
+                    <div class="gov-stat-sub">USD (allowed)</div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Budget Visualization -->
-            <div class="budget-card" id="budget">
+            <!-- Budget -->
+            <section class="panel budget-panel">
                 <div class="budget-header">
-                    <div>
-                        <div class="budget-title">Treasury &amp; Budget</div>
-                        <div class="budget-sub-text" id="budget-sub">Load a policy to view spend allocation</div>
+                    <div class="section-heading" style="margin-bottom:0">
+                        <p class="eyebrow">Treasury</p>
+                        <h2>Budget Allocation</h2>
+                        <p id="budget-sub" class="muted" style="margin-top:4px">Load a policy to view spend allocation.
+                        </p>
                     </div>
                     <div class="budget-amounts">
-                        <span class="budget-spent" id="budget-spent">$0</span>
-                        <span class="budget-limit" id="budget-limit">/ — limit</span>
+                        <span class="budget-spent-value" id="budget-spent">$0</span>
+                        <span class="budget-limit-label" id="budget-limit">/ — limit</span>
                     </div>
                 </div>
                 <div class="progress-track">
@@ -1090,49 +695,53 @@
                 </div>
                 <div class="budget-legend">
                     <div class="legend-item">
-                        <div class="legend-dot" style="background:var(--ent-accent)"></div>
+                        <div class="legend-dot" style="background:var(--primary)"></div>
                         Spent by agents
                     </div>
                     <div class="legend-item">
-                        <div class="legend-dot"
-                            style="background:var(--ent-surface-2); border:1px solid var(--ent-border)"></div>
+                        <div class="legend-dot" style="background:rgba(255,255,255,0.56); border:1px solid var(--line)">
+                        </div>
                         <span id="budget-remaining-label">Remaining</span>
                     </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Two-col: Agents + Audit Feed -->
-            <div class="two-col">
+            <section class="gov-two-col">
 
                 <!-- Agent Identity -->
-                <div class="panel" id="agents">
-                    <div class="panel-head">
-                        <span class="panel-title">🤖 Agent Identity</span>
-                        <span class="panel-badge" id="agent-count">0 registered</span>
+                <section class="panel">
+                    <div class="gov-panel-head">
+                        <div class="section-heading" style="margin-bottom:0">
+                            <p class="eyebrow">Identity</p>
+                            <h2>Agents</h2>
+                        </div>
+                        <span class="gov-panel-badge" id="agent-count">0 registered</span>
                     </div>
-                    <div class="panel-body">
+                    <div class="gov-panel-body">
                         <div class="agent-add-row">
                             <input type="text" id="new-agent-name" placeholder="Agent name…" />
                             <input type="text" id="new-agent-wallet" placeholder="Wallet (optional)"
-                                style="max-width:130px;" />
-                            <button class="btn-sm btn-sm-primary" id="add-agent-btn">Add</button>
+                                style="max-width:150px;" />
+                            <button class="btn btn-primary" id="add-agent-btn"
+                                style="padding:10px 16px; font-size:0.88rem;">Add</button>
                         </div>
                         <div id="agent-list">
-                            <div class="empty-state">
-                                <div class="empty-icon">🤖</div>
-                                Load dashboard to see agents.
-                            </div>
+                            <div class="empty-state">Load dashboard to see registered agents.</div>
                         </div>
                     </div>
-                </div>
+                </section>
 
                 <!-- Deep Audit Feed -->
-                <div class="panel" id="audit">
-                    <div class="panel-head">
-                        <span class="panel-title">🔍 Deep Audit Feed</span>
-                        <span class="panel-badge" id="audit-count">0 events</span>
+                <section class="panel">
+                    <div class="gov-panel-head">
+                        <div class="section-heading" style="margin-bottom:0">
+                            <p class="eyebrow">Feed</p>
+                            <h2>Audit Trail</h2>
+                        </div>
+                        <span class="gov-panel-badge" id="audit-count">0 events</span>
                     </div>
-                    <div class="panel-body">
+                    <div class="gov-panel-body">
                         <div class="audit-filters">
                             <button class="filter-chip active-chip" data-filter="all">All</button>
                             <button class="filter-chip" data-filter="allowed">Allowed</button>
@@ -1140,19 +749,32 @@
                             <button class="filter-chip" data-filter="anchored">Anchored</button>
                         </div>
                         <div id="audit-feed">
-                            <div class="empty-state">
-                                <div class="empty-icon">🔍</div>
-                                Load dashboard to view audit trail.
-                            </div>
+                            <div class="empty-state">Load dashboard to view audit trail.</div>
                         </div>
                     </div>
-                </div>
+                </section>
 
-            </div>
+            </section>
         </main>
     </div>
 
-    <!-- Wire up the same script, now renamed to activity.js (overwritten below) -->
+    <!-- Kill Switch Confirm -->
+    <div id="ks-confirm-overlay">
+        <div class="ks-dialog">
+            <h2>⚠️ Confirm Kill Switch</h2>
+            <p>This will <strong>suspend all active API keys</strong> for your account, immediately blocking all agent
+                activity. You can restore individual keys from Keys page.</p>
+            <div class="ks-dialog-btns">
+                <button class="btn btn-ghost" id="ks-cancel-btn">Cancel</button>
+                <button class="btn btn-primary" id="ks-confirm-btn" style="background:#bf573f;">Suspend All
+                    Keys</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toasts -->
+    <div id="toast-stack"></div>
+
     <script type="module" src="./activity.js"></script>
 </body>
 
