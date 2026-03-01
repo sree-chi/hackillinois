@@ -49,7 +49,7 @@ if (canvas) {
         const normalizedX = pointer.active ? (pointer.x - centerX) / centerX : 0;
         const normalizedY = pointer.active ? (pointer.y - centerY) / centerY : 0;
         backdropTitle.style.transform = `
-            translate3d(${(normalizedX * 28).toFixed(2)}px, ${(normalizedY * 18).toFixed(2)}px, 0)
+            translate3d(calc(-50% + ${(normalizedX * 28).toFixed(2)}px), calc(-50% + ${(normalizedY * 18).toFixed(2)}px), 0)
             rotateX(${(-normalizedY * 4).toFixed(2)}deg)
             rotateY(${(normalizedX * 5).toFixed(2)}deg)
         `;

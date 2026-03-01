@@ -74,21 +74,28 @@ textarea {
 
 .page-backdrop-title {
     position: fixed;
-    inset: auto 0 8vh 0;
-    display: flex;
-    justify-content: center;
+    top: 50%;
+    left: 50%;
     pointer-events: none;
     z-index: 0;
     font-family: "Syne", "Space Grotesk", sans-serif;
-    font-size: clamp(4.8rem, 14vw, 12rem);
+    font-size: clamp(4.4rem, 13vw, 10.5rem);
     font-weight: 800;
-    letter-spacing: -0.08em;
-    color: rgba(49, 35, 20, 0.08);
+    letter-spacing: -0.06em;
+    color: rgba(49, 35, 20, 0.1);
     text-transform: uppercase;
     transform-style: preserve-3d;
     transition: transform 120ms ease-out;
     user-select: none;
     white-space: nowrap;
+    padding: 0.16em 0.34em 0.22em;
+    border-radius: 999px;
+    background: rgba(255, 249, 240, 0.18);
+    border: 1px solid rgba(182, 132, 82, 0.08);
+    box-shadow:
+        0 24px 70px rgba(94, 64, 31, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.34);
+    backdrop-filter: blur(8px);
 }
 
 .login-layout {
