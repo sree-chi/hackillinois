@@ -105,6 +105,30 @@ def ensure_runtime_schema_compatibility() -> None:
             statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_policies_idempotency_key ON policies (idempotency_key)")
         else:
             statements.append("ALTER TABLE policies ADD COLUMN idempotency_key VARCHAR")
+    if "policy_schema_version" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append(
+                "ALTER TABLE policies ADD COLUMN IF NOT EXISTS policy_schema_version VARCHAR(50) NOT NULL DEFAULT 'sentinel-policy/v1'"
+            )
+        else:
+            statements.append(
+                "ALTER TABLE policies ADD COLUMN policy_schema_version VARCHAR(50) NOT NULL DEFAULT 'sentinel-policy/v1'"
+            )
+    if "risk_categories" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS risk_categories JSONB NOT NULL DEFAULT '[]'::jsonb")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN risk_categories JSON NOT NULL DEFAULT '[]'")
+    if "budget_config" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS budget_config JSONB NOT NULL DEFAULT '{}'::jsonb")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN budget_config JSON NOT NULL DEFAULT '{}'")
+    if "required_approvers" not in policy_columns:
+        if dialect == "postgresql":
+            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS required_approvers JSONB NOT NULL DEFAULT '[]'::jsonb")
+        else:
+            statements.append("ALTER TABLE policies ADD COLUMN required_approvers JSON NOT NULL DEFAULT '[]'")
 
     if not statements:
         pass

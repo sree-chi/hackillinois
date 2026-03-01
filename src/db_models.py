@@ -22,9 +22,13 @@ class PolicyModel(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(String(500), nullable=True)
+    policy_schema_version = Column(String(50), nullable=False, default="sentinel-policy/v1", server_default="sentinel-policy/v1")
     policy_hash = Column(String(64), nullable=False, index=True)
     # Using JSONB if on postgres, otherwise JSON for sqlite fallback if needed, but JSON is safer cross-db
     rules = Column(JSON, nullable=False)
+    risk_categories = Column(JSON, nullable=False, default=list, server_default="[]")
+    budget_config = Column(JSON, nullable=False, default=dict, server_default="{}")
+    required_approvers = Column(JSON, nullable=False, default=list, server_default="[]")
     version = Column(Integer, nullable=False, default=1, server_default="1")
     root_policy_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

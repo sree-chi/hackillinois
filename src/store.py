@@ -32,6 +32,7 @@ from src.models import (
     CreatePolicyRequest,
     IssueApiKeyRequest,
     LinkedWalletRecord,
+    POLICY_SCHEMA_VERSION,
     Policy,
     WalletLinkChallengeRecord,
     canonical_hash,
@@ -350,21 +351,29 @@ class DatabaseStore:
                     "id": existing.id,
                     "name": existing.name,
                     "description": existing.description,
+                    "policy_schema_version": getattr(existing, "policy_schema_version", POLICY_SCHEMA_VERSION),
                     "policy_hash": existing.policy_hash,
                     "rules": existing.rules,
+                    "risk_categories": getattr(existing, "risk_categories", []) or [],
+                    "budget_config": getattr(existing, "budget_config", {}) or {},
+                    "required_approvers": getattr(existing, "required_approvers", []) or [],
                     "created_at": existing.created_at,
                 })
 
         payload_data = payload.model_dump()
-        policy_hash = canonical_hash(payload_data)
+        policy_hash = canonical_hash(payload.canonical_hash_payload())
         policy = Policy(**payload_data, policy_hash=policy_hash)
 
         row = PolicyModel(
             id=policy.id,
             name=policy.name,
             description=policy.description,
+            policy_schema_version=policy.policy_schema_version,
             policy_hash=policy.policy_hash,
             rules=policy.rules.model_dump(),
+            risk_categories=policy.risk_categories,
+            budget_config=policy.budget_config.model_dump(exclude_none=False),
+            required_approvers=policy.required_approvers,
             created_at=policy.created_at,
             idempotency_key=idempotency_key,
         )
@@ -381,8 +390,12 @@ class DatabaseStore:
             "id": row.id,
             "name": row.name,
             "description": row.description,
+            "policy_schema_version": getattr(row, "policy_schema_version", POLICY_SCHEMA_VERSION),
             "policy_hash": row.policy_hash,
             "rules": row.rules,
+            "risk_categories": getattr(row, "risk_categories", []) or [],
+            "budget_config": getattr(row, "budget_config", {}) or {},
+            "required_approvers": getattr(row, "required_approvers", []) or [],
             "created_at": row.created_at,
         })
 
