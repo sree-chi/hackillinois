@@ -35,7 +35,6 @@ from src.models import (
     new_id,
     CreateAgentRequest,
     AgentRecord,
-    POLICY_SCHEMA_VERSION,
 )
 
 

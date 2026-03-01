@@ -9,8 +9,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
 
-POLICY_SCHEMA_VERSION = "sentinel-policy/v1"
-
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -20,35 +18,9 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:24]}"
 
 
-def canonicalize_json(value: Any) -> Any:
-    if isinstance(value, BaseModel):
-        value = value.model_dump(exclude_none=False)
-    if isinstance(value, dict):
-        return {key: canonicalize_json(value[key]) for key in sorted(value)}
-    if isinstance(value, list):
-        return [canonicalize_json(item) for item in value]
-    return value
-
-
-def canonical_json_dumps(payload: dict[str, Any]) -> str:
-    canonical_payload = json.dumps(canonicalize_json(payload), sort_keys=True, separators=(",", ":"))
-    return canonical_payload
-
-
 def canonical_hash(payload: dict[str, Any]) -> str:
-    canonical_payload = canonical_json_dumps(payload)
+    canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
-
-
-def normalize_string_list(values: list[str], *, casefold: bool = False) -> list[str]:
-    normalized: list[str] = []
-    for value in values:
-        candidate = value.strip()
-        if casefold:
-            candidate = candidate.upper()
-        if candidate and candidate not in normalized:
-            normalized.append(candidate)
-    return sorted(normalized)
 
 
 def expires_at(seconds: int) -> datetime:
@@ -78,42 +50,16 @@ class PolicyRule(BaseModel):
     proof_ttl_seconds: int = Field(default=300, ge=60, le=86400)
 
 
-class BudgetConfig(BaseModel):
-    currency: str = Field(default="USD", min_length=3, max_length=10)
-    max_total_spend_usd: float | None = Field(default=None, ge=0)
-    warning_threshold_usd: float | None = Field(default=None, ge=0)
-    period: Literal["request", "daily", "weekly", "monthly", "quarterly", "annual"] | None = None
-
-
 class CreatePolicyRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)
     rules: PolicyRule
-    risk_categories: list[str] = Field(default_factory=list)
-    budget_config: BudgetConfig = Field(default_factory=BudgetConfig)
-    required_approvers: list[str] = Field(default_factory=list)
-
-    def canonical_hash_payload(self) -> dict[str, Any]:
-        rules_payload = self.rules.model_dump(exclude_none=False)
-        rules_payload["allowed_http_methods"] = normalize_string_list(self.rules.allowed_http_methods, casefold=True)
-        rules_payload["trusted_origins"] = normalize_string_list(self.rules.trusted_origins)
-        rules_payload["trusted_executors"] = normalize_string_list(self.rules.trusted_executors)
-        return {
-            "policy_schema_version": POLICY_SCHEMA_VERSION,
-            "rules": rules_payload,
-            "risk_categories": normalize_string_list(self.risk_categories),
-            "budget_config": self.budget_config.model_dump(exclude_none=False),
-            "required_approvers": normalize_string_list(self.required_approvers),
-        }
 
 
 class UpdatePolicyRequest(BaseModel):
     name: str | None = Field(min_length=1, max_length=100)
-    description: str | None = Field(default=None, max_length=500)
+    description : str | None = Field(default=None, max_length=500)
     rules: PolicyRule | None = None
-    risk_categories: list[str] | None = None
-    budget_config: BudgetConfig | None = None
-    required_approvers: list[str] | None = None
 
 
 class IssueApiKeyRequest(BaseModel):
@@ -142,6 +88,13 @@ class VerifyPhoneCodeRequest(BaseModel):
     code: str = Field(min_length=4, max_length=12)
 
 
+class PhoneCodeChallengeResponse(BaseModel):
+    phone_number: str
+    expires_at: datetime
+    delivery_channel: str
+    dev_code: str | None = None
+
+
 class WalletLinkChallengeRequest(BaseModel):
     wallet_address: str = Field(min_length=32, max_length=80)
     provider: str = Field(default="phantom", min_length=2, max_length=30)
@@ -162,11 +115,9 @@ class Policy(BaseModel):
     name: str
     description: str | None = None
     rules: PolicyRule
-    policy_schema_version: str = POLICY_SCHEMA_VERSION
-    risk_categories: list[str] = Field(default_factory=list)
-    budget_config: BudgetConfig = Field(default_factory=BudgetConfig)
-    required_approvers: list[str] = Field(default_factory=list)
     policy_hash: str
+    version: int = 1
+    root_policy_id: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -255,7 +206,6 @@ class AuditRecord(BaseModel):
     http_method: str
     resource: str
     amount_usd: float | None = None
-    reasoning_trace: str | None = None
     action_hash: str | None = None
     policy_hash: str | None = None
     proof_id: str | None = None
@@ -325,7 +275,6 @@ class AccountRecord(BaseModel):
 
     account_id: str = Field(default_factory=lambda: new_id("acct"))
     email: str
-    phone_number: str | None = None
     full_name: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -399,13 +348,6 @@ class AccountSessionResponse(BaseModel):
     expires_at: datetime
 
 
-class PhoneCodeChallengeResponse(BaseModel):
-    phone_number: str
-    expires_at: datetime
-    delivery_channel: str
-    dev_code: str | None = None
-
-
 class AccountApiKeySummary(BaseModel):
     client_id: str
     app_name: str
@@ -423,11 +365,15 @@ class AccountDashboardResponse(BaseModel):
     linked_wallets: list[LinkedWalletRecord] = Field(default_factory=list)
 
 
-class CreateAgentRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    wallet_address: str | None = Field(default=None, max_length=120)
-    description: str | None = Field(default=None, max_length=500)
-
+class AuditStatsResponse(BaseModel):
+    policy_id: str
+    total_requests: int
+    allowed_requests: int
+    blocked_requests: int
+    anchored_receipts: int
+    total_spend_usd: float
+    remaining_credit_usd: float | None = None
+    policy_max_spend_usd: float | None = None
 
 class AgentRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -440,12 +386,8 @@ class AgentRecord(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
-class AuditStatsResponse(BaseModel):
-    policy_id: str
-    total_requests: int
-    allowed_requests: int
-    blocked_requests: int
-    anchored_receipts: int
-    total_spend_usd: float
-    remaining_credit_usd: float | None = None
-    policy_max_spend_usd: float | None = None
+class CreateAgentRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    wallet_address: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+
