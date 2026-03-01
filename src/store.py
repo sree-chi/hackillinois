@@ -574,6 +574,24 @@ class DatabaseStore:
             self.db.commit()
             self.db.refresh(row)
         return ApiClientRecord.model_validate(row)
+    def get_api_pricing(self, client_id: str, api_link: str):
+        return (
+            self.db.query(AccountApiPricingModel)
+            .filter(
+                AccountApiPricingModel.client_id == client_id,
+                AccountApiPricingModel.api_link == api_link
+            )
+            .first()
+        )
+
+    def list_api_pricing(self, client_id: str):
+        return (
+            self.db.query(AccountApiPricingModel)
+            .filter(
+                AccountApiPricingModel.client_id == client_id
+            )
+            .all()
+        )
 
     def create_policy(self, payload: CreatePolicyRequest, idempotency_key: str | None) -> Policy:
         if idempotency_key:

@@ -4,118 +4,936 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel Auth API Docs - AI Agent Integration</title>
+    <title>API Docs - Sentinel Auth</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
         rel="stylesheet">
+
+    <style>
+        /* Documentation Specific Styles */
+        .docs-layout {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 40px;
+            max-width: 1400px;
+            margin: 0 auto;
+            align-items: start;
+        }
+
+        .docs-sidebar {
+            position: sticky;
+            top: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-right: 20px;
+            border-right: 1px solid var(--line);
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        .docs-sidebar-link {
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 0.95rem;
+            padding: 6px 12px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .docs-sidebar-link:hover,
+        .docs-sidebar-link.active {
+            background: rgba(182, 132, 82, 0.12);
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .docs-sidebar-section {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--secondary-dark);
+            margin-top: 20px;
+            margin-bottom: 8px;
+            padding-left: 12px;
+            font-weight: 700;
+        }
+
+        .docs-content {
+            display: flex;
+            flex-direction: column;
+            gap: 48px;
+            padding-bottom: 80px;
+        }
+
+        .docs-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .docs-section h2 {
+            font-size: 2rem;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+        }
+
+        .docs-section h3 {
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .method-badge {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .method-get {
+            background: rgba(59, 130, 246, 0.15);
+            color: #2563eb;
+        }
+
+        .method-post {
+            background: rgba(16, 185, 129, 0.15);
+            color: #059669;
+        }
+
+        .method-put,
+        .method-patch {
+            background: rgba(245, 158, 11, 0.15);
+            color: #d97706;
+        }
+
+        .method-delete {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+
+        .endpoint-url {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 1.1rem;
+            color: var(--primary-dark);
+            background: rgba(255, 255, 255, 0.5);
+            padding: 4px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+        }
+
+        .docs-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+        }
+
+        .docs-table th,
+        .docs-table td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--line);
+            font-size: 0.95rem;
+        }
+
+        .docs-table th {
+            background: rgba(182, 132, 82, 0.08);
+            font-weight: 500;
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .docs-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .docs-table code {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--primary-dark);
+        }
+
+        .req-yes {
+            color: #dc2626;
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .req-no {
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .code-block-wrapper {
+            margin-top: 16px;
+        }
+
+        .code-block-header {
+            display: flex;
+            justify-content: space-between;
+            background: #111;
+            color: #888;
+            padding: 8px 16px;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            font-size: 0.85rem;
+            font-family: "IBM Plex Mono", monospace;
+        }
+
+        .code-block-header.success {
+            color: #10b981;
+        }
+
+        .code-block-header.error {
+            color: #ef4444;
+        }
+
+        .docs-snippet {
+            margin-top: 0;
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+            border: none;
+        }
+
+        @media (max-width: 960px) {
+            .docs-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .docs-sidebar {
+                position: relative;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--line);
+                padding-bottom: 20px;
+            }
+        }
+    </style>
 </head>
 
 <body>
     <div class="page-shell">
-        <main class="layout">
-            <nav class="topbar panel">
-                <a class="brand-link" href="/">Sentinel Auth</a>
-                <div class="topbar-links">
-                    <a class="topbar-link" href="/">Developer Portal</a>
-                    <a class="topbar-link" href="/activity.html">Activity Feed</a>
-                    <a class="topbar-link topbar-link-active" href="/docs">Documentation</a>
-                </div>
-            </nav>
+        <nav class="topbar panel">
+            <a class="brand-link" href="/">Sentinel Auth</a>
+            <div class="topbar-links">
+                <a class="topbar-link" href="/activity.html">Dashboard</a>
+                <a class="topbar-link" href="/dashboard.html">Keys</a>
+                <a class="topbar-link topbar-link-active" href="/documentation/index.html">Documentation</a>
+                <a class="topbar-link" href="/agent.html">Agent Demo</a>
+            </div>
+        </nav>
 
-            <section class="hero panel">
-                <p class="eyebrow">API Documentation</p>
-                <h1>AI Agent Integration</h1>
-                <p class="hero-copy">
-                    Learn how to route your LLM assistants, autonomous agents, and AI bots through the
-                    Sentinel Auth policy engine.
-                    Ensure your agents operate within strict financial boundaries backed by Solana state proofs.
-                </p>
-            </section>
+        <main class="docs-layout">
+            <aside class="docs-sidebar">
+                <div class="docs-sidebar-section">Getting Started</div>
+                <a href="#overview" class="docs-sidebar-link active">Overview</a>
+                <a href="#setup" class="docs-sidebar-link">Base URL & Setup</a>
+                <a href="#health" class="docs-sidebar-link">Health & Public</a>
 
-            <section class="grid" style="grid-template-columns: 1fr;">
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Guide</p>
-                        <h2>Using LLM Tool Calling with Sentinel</h2>
-                    </div>
+                <div class="docs-sidebar-section">Authentication</div>
+                <a href="#accounts" class="docs-sidebar-link">Accounts & Sessions</a>
+                <a href="#keys" class="docs-sidebar-link">Developer Keys</a>
+
+                <div class="docs-sidebar-section">Core API</div>
+                <a href="#policies" class="docs-sidebar-link">Policies</a>
+                <a href="#authorize" class="docs-sidebar-link">Authorization Engine</a>
+                <a href="#audits" class="docs-sidebar-link">Audits & Stats</a>
+                <a href="#agent-intent" class="docs-sidebar-link">Agent Intent</a>
+
+                <div class="docs-sidebar-section">Reference</div>
+                <a href="#schema" class="docs-sidebar-link">Request Format</a>
+                <a href="#limits" class="docs-sidebar-link">Limits & Errors</a>
+                <a href="#workflow" class="docs-sidebar-link">Example Workflow</a>
+            </aside>
+
+            <div class="docs-content">
+
+                <section id="overview" class="docs-section">
+                    <p class="eyebrow">Overview</p>
+                    <h2>What is Sentinel Auth?</h2>
+                    <p class="hero-copy" style="margin-top: 0;"><strong>Authorize · Audit · Secure · Anchor</strong></p>
                     <p class="muted">
-                        When building agents with APIs like Google Gemini, OpenAI, or Anthropic, you should expose the Sentinel Auth proxy as an
-                        available function or tool. Instead of letting the AI model directly hit live APIs, you
-                        intercept its intent and validate it against your security policy.
+                        Sentinel Auth is a REST API and policy engine that sits between your autonomous AI agents and
+                        real-world APIs. You define strict security policies (e.g., maximum spend limits, allowed HTTP
+                        methods, and rate limits), and your AI agents must request permission via Sentinel before
+                        acting.
                     </p>
+                    <p class="muted">
+                        Sentinel detects policy violations, strictly limits financial exposure, and provides a
+                        Solana-backed Web3 audit trail by anchoring every allowed/blocked action to the blockchain.
+                        High-risk actions automatically trigger a <code>402 Payment Required</code> challenge, requiring
+                        a cryptographic signature (x402 token) from an authorized wallet before proceeding.
+                    </p>
+                </section>
 
-                    <div class="output-card">
-                        <h3>1. Model Tool Definition</h3>
-                        <p class="muted">Add a schema similar to this to your agent's tool/function definitions:</p>
-                        <pre class="snippet">
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="setup" class="docs-section">
+                    <p class="eyebrow">Setup</p>
+                    <h2>Base URL & Setup</h2>
+                    <p class="muted">FastAPI · PostgreSQL · Solana</p>
+                    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+                        <div class="output-card compact-card">
+                            <span class="meta-label">Local Development</span>
+                            <code>http://localhost:8000</code>
+                        </div>
+                        <div class="output-card compact-card">
+                            <span class="meta-label">Production</span>
+                            <code>https://your-sentinel.ondigitalocean.app/server</code>
+                        </div>
+                    </div>
+                    <div class="output-card compact-card">
+                        <span class="meta-label">Headers Required</span>
+                        <p class="muted" style="margin-top: 4px; margin-bottom: 8px;">
+                            <code>Content-Type: application/json</code></p>
+                        <p class="muted" style="margin-top: 4px; margin-bottom: 8px;"><strong>Agent Endpoints:</strong>
+                            <code>Authorization: Bearer &lt;API_KEY&gt;</code></p>
+                        <p class="muted" style="margin-top: 4px;"><strong>Dashboard Endpoints:</strong>
+                            <code>X-Session-Token: &lt;SESSION_TOKEN&gt;</code></p>
+                    </div>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="health" class="docs-section">
+                    <p class="eyebrow">Health & Public</p>
+                    <h2>System Status</h2>
+                    <p class="muted">Use these endpoints to verify the API is running and accessible.</p>
+
+                    <h3>
+                        <span class="method-badge method-get">GET</span>
+                        <span class="endpoint-url">/health</span>
+                    </h3>
+                    <p class="muted">Server health check. Returns current status.</p>
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header success">Response: 200 OK</div>
+                        <pre class="snippet docs-snippet">
 {
-  "name": "request_action_authorization",
-  "description": "Request permission to perform a financial or high-risk action.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "action_type": { "type": "string" },
-      "http_method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE"] },
-      "resource": { "type": "string" },
-      "amount_usd": { "type": "number" },
-      "reasoning": { "type": "string", "description": "Detailed reasoning for why this action is necessary." }
-    },
-    "required": ["action_type", "http_method", "resource", "amount_usd", "reasoning"]
-  }
+  "status": "healthy"
 }</pre>
                     </div>
 
-                    <div class="output-card">
-                        <h3>2. Submitting to Sentinel Auth</h3>
-                        <p class="muted">When the LLM decides to call the tool, parse its arguments and submit a POST
-                            request to the <code>/v1/authorize</code> endpoint of your Sentinel instance.</p>
-                        <pre class="snippet">
-// Parse the tool/function arguments returned by Gemini/OpenAI/Claude
-const agentArguments = JSON.parse(toolCall.arguments);
-
-const res = await fetch(`https://api.sentinel-auth.com/v1/authorize`, {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${process.env.SENTINEL_API_KEY}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    policy_id: "pol_active_policy_id",
-    requester: "agent://llm_bot_v1",
-    action: {
-      type: agentArguments.action_type,
-      http_method: agentArguments.http_method,
-      resource: agentArguments.resource,
-      amount_usd: agentArguments.amount_usd
-    },
-    reasoning_trace: agentArguments.reasoning
-  })
-});
-
-const authorizationResponse = await res.json();
-// Send this response back to the LLM so it knows if it was approved or blocked!</pre>
-                    </div>
-
-                    <div class="output-card">
-                        <h3>3. Handling the Decision</h3>
-                        <p class="muted">Depending on what Sentinel Auth returns, handle the authorization flow:</p>
-                        <ul class="muted" style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
-                            <li><strong>200 OK:</strong> The action is approved. You will receive a
-                                <code>receipt_signature</code> anchored on Solana. Proceed to execute the real API call.</li>
-                            <li><strong>402 Payment Required:</strong> The amount exceeds the
-                                <code>HIGH_RISK_THRESHOLD</code>. You must use an x402 token or sign a Solana
-                                transaction to approve the risk.</li>
-                            <li><strong>403 Forbidden:</strong> The AI model attempted an action that violated the
-                                active safety policy (e.g., over spend limit). Reject the action.</li>
-                        </ul>
+                    <h3>
+                        <span class="method-badge method-get">GET</span>
+                        <span class="endpoint-url">/v1/public/overview</span>
+                    </h3>
+                    <p class="muted">Returns a public overview of the API status, key endpoints, quickstart guide, and a
+                        sample policy rule configuration.</p>
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header success">Response: 200 OK</div>
+                        <pre class="snippet docs-snippet">
+{
+  "name": "Sentinel Auth API",
+  "status": "online",
+  "docs_url": "http://localhost:8000/docs",
+  "key_endpoint": "http://localhost:8000/v1/accounts/register",
+  "quickstart": [
+    "Create a developer key from the public portal or POST /v1/developer/keys.",
+    "..."
+  ],
+  "sample_policy_rules": {
+    "allowed_http_methods": ["GET", "POST"],
+    "max_spend_usd": 5000,
+    "max_requests_per_minute": 60
+  }
+}</pre>
                     </div>
                 </section>
-            </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="accounts" class="docs-section">
+                    <p class="eyebrow">Authentication</p>
+                    <h2>Accounts & Sessions</h2>
+                    <p class="muted">Manage human developer accounts and portal access sessions.</p>
+
+                    <h3>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-url">/v1/accounts/register</span>
+                    </h3>
+                    <p class="muted">Register a new developer account. Returns a session token for portal access.</p>
+                    <table class="docs-table">
+                        <thead>
+                            <tr>
+                                <th>Field</th>
+                                <th>Type</th>
+                                <th>Req</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>email</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Developer's email address (min 3 chars)</td>
+                            </tr>
+                            <tr>
+                                <td><code>password</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Strong password (min 8 chars)</td>
+                            </tr>
+                            <tr>
+                                <td><code>full_name</code></td>
+                                <td>string</td>
+                                <td class="req-no">no</td>
+                                <td>Developer's full name</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header success">Response: 201 Created</div>
+                        <pre class="snippet docs-snippet">
+{
+  "account": {
+    "account_id": "acct_1a2b3c...",
+    "email": "dev@example.com",
+    "full_name": "Jane Doe",
+    "created_at": "2025-01-15T12:00:00.000Z"
+  },
+  "session_token": "sess_tok_abc123...",
+  "expires_at": "2025-01-16T12:00:00.000Z"
+}</pre>
+                    </div>
+
+                    <h3>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-url">/v1/accounts/login</span>
+                    </h3>
+                    <p class="muted">Authenticate an existing developer and receive a session token.</p>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="keys" class="docs-section">
+                    <p class="eyebrow">Authentication</p>
+                    <h2>Developer Keys</h2>
+                    <p class="muted">Issue and manage the API keys that your autonomous agents use to authenticate.</p>
+
+                    <h3>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-url">/v1/developer/keys</span>
+                    </h3>
+                    <p class="muted">Issue a new API key for an AI agent. <strong>Requires X-Session-Token
+                            header.</strong></p>
+                    <table class="docs-table">
+                        <thead>
+                            <tr>
+                                <th>Field</th>
+                                <th>Type</th>
+                                <th>Req</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>app_name</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Name of the agent/app using the key</td>
+                            </tr>
+                            <tr>
+                                <td><code>owner_name</code></td>
+                                <td>string</td>
+                                <td class="req-no">no</td>
+                                <td>Name of the specific key owner</td>
+                            </tr>
+                            <tr>
+                                <td><code>use_case</code></td>
+                                <td>string</td>
+                                <td class="req-no">no</td>
+                                <td>Brief description of the agent's purpose</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header success">Response: 201 Created</div>
+                        <pre class="snippet docs-snippet">
+{
+  "client_id": "cli_9f8e7d...",
+  "app_name": "Trading Bot",
+  "owner_email": "dev@example.com",
+  "api_key": "ska_live_abc123def456...",
+  "api_key_prefix": "ska_live_abc1",
+  "created_at": "2025-01-15T12:00:00.000Z",
+  "base_url": "http://localhost:8000",
+  "authorization_header": "Bearer ska_live_abc123def456..."
+}</pre>
+                    </div>
+
+                    <h3>
+                        <span class="method-badge method-delete">DELETE</span>
+                        <span class="endpoint-url">/v1/accounts/me/keys/:clientId</span>
+                    </h3>
+                    <p class="muted">Revoke an API key permanently. Any active policies/agents using this key will
+                        immediately receive 401 Unauthorized errors.</p>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="policies" class="docs-section">
+                    <p class="eyebrow">Core API</p>
+                    <h2>Policies</h2>
+                    <p class="muted">Create and list the strict security boundaries for your agents.</p>
+
+                    <h3>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-url">/v1/policies</span>
+                    </h3>
+                    <p class="muted">Create a new security policy. <strong>Requires Developer API Key.</strong></p>
+                    <table class="docs-table">
+                        <thead>
+                            <tr>
+                                <th>Field</th>
+                                <th>Type</th>
+                                <th>Req</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>name</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Human-readable policy name.</td>
+                            </tr>
+                            <tr>
+                                <td><code>description</code></td>
+                                <td>string</td>
+                                <td class="req-no">no</td>
+                                <td>Optional details about the policy.</td>
+                            </tr>
+                            <tr>
+                                <td><code>rules.max_spend_usd</code></td>
+                                <td>number</td>
+                                <td class="req-no">no</td>
+                                <td>Maximum cumulative lifetime spend allowed.</td>
+                            </tr>
+                            <tr>
+                                <td><code>rules.allowed_http_methods</code></td>
+                                <td>array</td>
+                                <td class="req-no">no</td>
+                                <td>e.g. <code>["GET", "POST"]</code>.</td>
+                            </tr>
+                            <tr>
+                                <td><code>rules.max_requests_per_minute</code></td>
+                                <td>number</td>
+                                <td class="req-no">no</td>
+                                <td>Strict rate limit for agents using this policy.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header success">Response: 201 Created</div>
+                        <pre class="snippet docs-snippet">
+{
+  "id": "pol_a1b2c3d4...",
+  "name": "Strict Trading Policy",
+  "rules": {
+    "allowed_http_methods": ["GET", "POST"],
+    "max_spend_usd": 100.0,
+    "max_requests_per_minute": 10
+  },
+  "policy_hash": "a8f5f167f44f4964e6c...",
+  "created_at": "2025-01-15T12:00:00.000Z"
+}</pre>
+                    </div>
+
+                    <h3>
+                        <span class="method-badge method-get">GET</span>
+                        <span class="endpoint-url">/v1/policies</span>
+                    </h3>
+                    <p class="muted">List all policies created by the authenticated developer.</p>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="authorize" class="docs-section">
+                    <p class="eyebrow">Core API</p>
+                    <h2>Authorization Engine</h2>
+                    <p class="muted">The core engine. Submits an agent's intended action for evaluation against a
+                        specific policy.</p>
+
+                    <h3>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-url">/v1/authorize</span>
+                    </h3>
+
+                    <h4>Request Body</h4>
+                    <table class="docs-table">
+                        <thead>
+                            <tr>
+                                <th>Field</th>
+                                <th>Type</th>
+                                <th>Req</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>policy_id</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>The ID of the policy to evaluate against.</td>
+                            </tr>
+                            <tr>
+                                <td><code>requester</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Identity of the agent (e.g., <code>agent://trading_bot</code>).</td>
+                            </tr>
+                            <tr>
+                                <td><code>action.type</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Short action category (e.g., <code>wire_transfer</code>).</td>
+                            </tr>
+                            <tr>
+                                <td><code>action.http_method</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>HTTP method (e.g., <code>POST</code>, <code>GET</code>).</td>
+                            </tr>
+                            <tr>
+                                <td><code>action.resource</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Target resource path/URI.</td>
+                            </tr>
+                            <tr>
+                                <td><code>action.amount_usd</code></td>
+                                <td>number</td>
+                                <td class="req-no">no</td>
+                                <td>Estimated dollar cost of the action.</td>
+                            </tr>
+                            <tr>
+                                <td><code>reasoning_trace</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>AI's chain-of-thought justifying the action.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top: 20px;">
+                        <div>
+                            <div class="code-block-wrapper">
+                                <div class="code-block-header success">Response: 200 OK (Approved)</div>
+                                <pre class="snippet docs-snippet">
+{
+  "request_id": "req_12345...",
+  "policy_id": "pol_a1b2c3d4...",
+  "action_hash": "e4d90f...",
+  "allowed": true,
+  "decision": "allow",
+  "receipt_status": "anchored",
+  "receipt_signature": "5kG9X...solana_tx...",
+  "created_at": "2025-01-15T12:05:00Z"
+}</pre>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="code-block-wrapper">
+                                <div class="code-block-header error">Response: 403 Forbidden (Blocked)</div>
+                                <pre class="snippet docs-snippet">
+{
+  "error": {
+    "type": "policy_error",
+    "code": "POLICY_LIMIT_EXCEEDED",
+    "message": "Action exceeds budget.",
+    "status": 403,
+    "details": {
+      "safety_violation": {
+        "category": "spend_limit_exceeded"
+      }
+    }
+  }
+}</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header error">Response: 402 Payment Required (High Risk)</div>
+                        <pre class="snippet docs-snippet">
+{
+  "detail": "High-risk actions require a verified payment token via x-solana-tx-signature."
+}</pre>
+                        <p class="muted" style="font-size: 0.85rem; padding: 10px;">Triggered automatically if
+                            <code>amount_usd</code> is &gt; $1,000. Agent must resubmit the exact same payload but
+                            include a signed micro-transaction in the <code>x-solana-tx-signature</code> header.</p>
+                    </div>
+
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="audits" class="docs-section">
+                    <p class="eyebrow">Core API</p>
+                    <h2>Audits & Stats</h2>
+                    <p class="muted">Retrieve historical records of agent behavior and policy health.</p>
+
+                    <h3>
+                        <span class="method-badge method-get">GET</span>
+                        <span class="endpoint-url">/v1/audits/:policy_id</span>
+                    </h3>
+                    <p class="muted">List all historical audit records (both allowed and blocked actions) for a specific
+                        policy.</p>
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header success">Response: 200 OK</div>
+                        <pre class="snippet docs-snippet">
+{
+  "policy_id": "pol_a1b2c3d4...",
+  "data": [
+    {
+      "id": "aud_1a2b...",
+      "status": "allowed",
+      "action_type": "transfer",
+      "amount_usd": 50.0,
+      "receipt_signature": "5kG9X...",
+      "explorer_url": "https://explorer.solana.com/tx/5kG9X...?cluster=devnet"
+    }
+  ]
+}</pre>
+                    </div>
+
+                    <h3>
+                        <span class="method-badge method-get">GET</span>
+                        <span class="endpoint-url">/v1/audits/:policy_id/stats</span>
+                    </h3>
+                    <p class="muted">Get aggregated statistics for a policy.</p>
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header success">Response: 200 OK</div>
+                        <pre class="snippet docs-snippet">
+{
+  "policy_id": "pol_a1b2c3d4...",
+  "total_requests": 150,
+  "allowed_requests": 142,
+  "blocked_requests": 8,
+  "total_spend_usd": 450.0,
+  "remaining_credit_usd": 4550.0,
+  "policy_max_spend_usd": 5000.0
+}</pre>
+                    </div>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="agent-intent" class="docs-section">
+                    <p class="eyebrow">Core API</p>
+                    <h2>Agent Intent</h2>
+                    <p class="muted">A utility endpoint that takes a raw, human-language command and uses Google Gemini
+                        to translate it into a strict Sentinel JSON format.</p>
+
+                    <h3>
+                        <span class="method-badge method-post">POST</span>
+                        <span class="endpoint-url">/v1/agent/intent</span>
+                    </h3>
+                    <table class="docs-table">
+                        <thead>
+                            <tr>
+                                <th>Field</th>
+                                <th>Type</th>
+                                <th>Req</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>policy_id</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Active policy ID context</td>
+                            </tr>
+                            <tr>
+                                <td><code>human_command</code></td>
+                                <td>string</td>
+                                <td class="req-yes">yes</td>
+                                <td>Natural language instruction (e.g. "Send $50 to Alice")</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="schema" class="docs-section">
+                    <p class="eyebrow">Reference</p>
+                    <h2>Request Format</h2>
+                    <p class="muted">Every agent request must explicitly state what it intends to do <em>before</em> it
+                        does it.</p>
+
+                    <div class="output-card">
+                        <h3>Action Schema</h3>
+                        <p class="muted" style="margin-top: 8px; margin-bottom: 12px;">Submitted within the body of a
+                            POST request to <code>/v1/authorize</code>.</p>
+                        <table class="docs-table" style="margin-top: 0;">
+                            <tbody>
+                                <tr>
+                                    <td><code>policy_id</code></td>
+                                    <td>string</td>
+                                    <td>ID of the ruleset to evaluate against</td>
+                                </tr>
+                                <tr>
+                                    <td><code>requester</code></td>
+                                    <td>string</td>
+                                    <td>A string identifying the agent</td>
+                                </tr>
+                                <tr>
+                                    <td><code>action.type</code></td>
+                                    <td>string</td>
+                                    <td>Short action categorization (e.g. <code>api_call</code>)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>action.http_method</code></td>
+                                    <td>string</td>
+                                    <td><code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code></td>
+                                </tr>
+                                <tr>
+                                    <td><code>action.resource</code></td>
+                                    <td>string</td>
+                                    <td>URI or path the agent intends to interact with</td>
+                                </tr>
+                                <tr>
+                                    <td><code>action.amount_usd</code></td>
+                                    <td>number</td>
+                                    <td>Dollar amount this action will cost/move</td>
+                                </tr>
+                                <tr>
+                                    <td><code>reasoning_trace</code></td>
+                                    <td>string</td>
+                                    <td>LLM chain-of-thought justifying the action</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="limits" class="docs-section">
+                    <p class="eyebrow">Reference</p>
+                    <h2>Limits & Errors</h2>
+
+                    <div class="output-card">
+                        <p class="muted" style="margin-top: 0;"><strong>Per-Policy Budgets:</strong> Enforced by
+                            comparing the sum of all previously approved <code>amount_usd</code> for a policy against
+                            <code>max_spend_usd</code>. Returns <code>403 Forbidden</code> if exceeded.</p>
+                        <p class="muted" style="margin-top: 12px;"><strong>Per-Policy Rate Limits:</strong> Controlled
+                            by <code>max_requests_per_minute</code>. Returns <code>429 Too Many Requests</code> if
+                            exceeded.</p>
+                        <p class="muted" style="margin-top: 12px;"><strong>High-Risk Auth (x402):</strong> Actions
+                            requesting <code>amount_usd</code> >= <code>$1,000</code> automatically fail with
+                            <code>402 Payment Required</code> unless a valid Solana signature is attached.</p>
+                    </div>
+
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header error">Standard Error Envelope</div>
+                        <pre class="snippet docs-snippet">
+{
+  "detail": {
+    "error": {
+      "type": "policy_error",
+      "code": "RATE_LIMIT_EXCEEDED",
+      "message": "The maximum number of requests per minute for this policy has been exceeded.",
+      "policy_id": "pol_a1b2c3d4...",
+      "status": 429,
+      "details": { "limit": 60 }
+    }
+  }
+}</pre>
+                    </div>
+                </section>
+
+                <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
+
+                <section id="workflow" class="docs-section">
+                    <p class="eyebrow">Reference</p>
+                    <h2>Example Workflow</h2>
+                    <p class="muted">Create a Key → Create a Policy → Request Authorization → Execute</p>
+
+                    <div class="code-block-wrapper">
+                        <div class="code-block-header">End-to-End Terminal Commands</div>
+                        <pre class="snippet docs-snippet">
+# 1. Get an API key using your Dashboard Session Token
+curl -s -X POST http://localhost:8000/v1/developer/keys \
+  -H "X-Session-Token: sess_tok_abc..." \
+  -d '{"app_name":"Demo Agent"}'
+
+# 2. Create a policy with a $50 spend limit
+curl -s -X POST http://localhost:8000/v1/policies \
+  -H "Authorization: Bearer ska_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Demo Policy",
+    "rules": {"max_spend_usd": 50.0}
+  }'
+
+# 3. Agent requests permission to spend $10 on an API call
+curl -s -X POST http://localhost:8000/v1/authorize \
+  -H "Authorization: Bearer ska_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "policy_id": "pol_your_policy_id",
+    "requester": "agent://demo",
+    "action": {
+      "type": "llm_query",
+      "http_method": "POST",
+      "resource": "gemini-2.5-flash",
+      "amount_usd": 10.0
+    },
+    "reasoning_trace": "Need to generate text for user."
+  }'
+
+# 4. Agent receives 200 OK + Solana receipt signature.
+# Agent can now safely make the actual HTTP call to the requested API!</pre>
+                    </div>
+                </section>
+
+            </div>
         </main>
     </div>
+
+    <script>
+        const sections = document.querySelectorAll('.docs-section');
+        const navLinks = document.querySelectorAll('.docs-sidebar-link');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (pageYOffset >= sectionTop - 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href').includes(current)) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
 </body>
 
 </html>

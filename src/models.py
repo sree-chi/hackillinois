@@ -515,3 +515,18 @@ class BudgetExceptionRecord(BaseModel):
     status: BudgetExceptionStatus
     created_at: datetime
     updated_at: datetime | None = None
+
+
+class ApiPricingRequest(BaseModel):
+    api_link: str = Field(min_length=1, max_length=500)
+    price_per_call_usd: float = Field(ge=0)
+
+
+class ApiPricingRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    client_id: str
+    api_link: str
+    price_per_call_usd: float
+    created_at: datetime
