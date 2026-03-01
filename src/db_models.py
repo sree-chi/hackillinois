@@ -16,6 +16,12 @@ class ReceiptStatusEnum(enum.Enum):
     skipped = "skipped"
     failed = "failed"
 
+class BudgetExceptionStatus(enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    denied = "denied"
+    used = "used"
+
 class PolicyModel(Base):
     __tablename__ = "policies"
 
@@ -199,4 +205,19 @@ class AgentModel(Base):
 
     __table_args__ = (
         Index("ix_agents_account_created", "account_id", "created_at"),
+    )
+
+class BudgetExceptionModel(Base):
+    __tablename__ = "budget_exceptions"
+
+    id = Column(String, primary_key=True, index=True)
+    policy_id = Column(String, nullable=False, index=True)
+    agent_wallet = Column(String(120), nullable=False, index=True)
+    amount_usd = Column(Float, nullable=False)
+    status = Column(Enum(BudgetExceptionStatus), default=BudgetExceptionStatus.pending, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_budget_exceptions_lookup", "policy_id", "agent_wallet", "status"),
     )

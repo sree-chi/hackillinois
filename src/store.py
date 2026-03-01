@@ -17,6 +17,8 @@ from src.db_models import (
     AuditRecordModel,
     AuditStatusEnum,
     AuthorizationProofModel,
+    BudgetExceptionModel,
+    BudgetExceptionStatus,
     PolicyModel,
     ReceiptStatusEnum,
 )
@@ -29,6 +31,7 @@ from src.models import (
     AuditRecord,
     AuditStatsResponse,
     AuthorizationProof,
+    BudgetExceptionRecord,
     CreateAgentRequest,
     CreatePolicyRequest,
     IssueApiKeyRequest,
@@ -677,3 +680,69 @@ class DatabaseStore:
         self.db.delete(row)
         self.db.commit()
         return True
+
+    # ── Budget Exceptions ────────────────────────────────────────────────────
+
+    def create_budget_exception(self, policy_id: str, agent_wallet: str, amount_usd: float) -> BudgetExceptionRecord:
+        # Check if a pending or approved one already exists for this wallet & amount exactly
+        existing = (
+            self.db.query(BudgetExceptionModel)
+            .filter(
+                BudgetExceptionModel.policy_id == policy_id,
+                BudgetExceptionModel.agent_wallet == agent_wallet,
+                BudgetExceptionModel.amount_usd == amount_usd,
+                BudgetExceptionModel.status.in_([BudgetExceptionStatus.pending, BudgetExceptionStatus.approved])
+            )
+            .first()
+        )
+        if existing:
+            return BudgetExceptionRecord.model_validate(existing)
+
+        exception_id = new_id("exc")
+        model = BudgetExceptionModel(
+            id=exception_id,
+            policy_id=policy_id,
+            agent_wallet=agent_wallet,
+            amount_usd=amount_usd,
+            status=BudgetExceptionStatus.pending,
+        )
+        self.db.add(model)
+        self.db.commit()
+        return BudgetExceptionRecord.model_validate(model)
+
+    def list_exceptions(self, policy_id: str) -> list[BudgetExceptionRecord]:
+        rows = (
+            self.db.query(BudgetExceptionModel)
+            .filter(BudgetExceptionModel.policy_id == policy_id)
+            .order_by(BudgetExceptionModel.created_at.desc())
+            .all()
+        )
+        return [BudgetExceptionRecord.model_validate(row) for row in rows]
+
+    def update_exception_status(self, exception_id: str, status: BudgetExceptionStatus) -> BudgetExceptionRecord | None:
+        row = self.db.query(BudgetExceptionModel).filter(BudgetExceptionModel.id == exception_id).first()
+        if not row:
+            return None
+        row.status = status
+        self.db.commit()
+        self.db.refresh(row)
+        return BudgetExceptionRecord.model_validate(row)
+
+    def consume_approved_exception(self, policy_id: str, agent_wallet: str, amount_usd: float) -> bool:
+        row = (
+            self.db.query(BudgetExceptionModel)
+            .filter(
+                BudgetExceptionModel.policy_id == policy_id,
+                BudgetExceptionModel.agent_wallet == agent_wallet,
+                BudgetExceptionModel.amount_usd == amount_usd,
+                BudgetExceptionModel.status == BudgetExceptionStatus.approved
+            )
+            .order_by(BudgetExceptionModel.created_at.asc())
+            .first()
+        )
+        if not row:
+            return False
+        row.status = BudgetExceptionStatus.used
+        self.db.commit()
+        return True
+

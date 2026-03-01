@@ -45,6 +45,7 @@ from src.models import (
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
+    BudgetExceptionRecord,
     CreateAgentRequest,
     LinkedWalletRecord,
     LoginAccountRequest,
@@ -1030,7 +1031,17 @@ def authorize(
     elif rules.max_spend_usd is not None:
         total_spend = store.get_total_spend_usd(payload.policy_id)
         projected_spend = total_spend + (payload.action.amount_usd or 0)
-        if projected_spend > rules.max_spend_usd:
+        
+        budget_waived = False
+        if payload.agent_wallet and payload.action.amount_usd is not None:
+            if store.consume_approved_exception(payload.policy_id, payload.agent_wallet, payload.action.amount_usd):
+                budget_waived = True
+                logger.info(f"Budget exception consumed for wallet {payload.agent_wallet}; waiving limit.")
+
+        if not budget_waived and projected_spend > rules.max_spend_usd:
+            if payload.agent_wallet and payload.action.amount_usd is not None:
+                store.create_budget_exception(payload.policy_id, payload.agent_wallet, payload.action.amount_usd)
+            
             violation = SafetyViolation(
                 category="spend_limit_exceeded",
                 severity="high",
@@ -1370,3 +1381,41 @@ def delete_agent(
             message="The requested agent does not exist.",
         )
     return {"status": "success", "agent_id": agent_id}
+
+
+# ── Budget Exceptions ────────────────────────────────────────────────────────
+
+@app.get("/v1/policies/{policy_id}/exceptions", response_model=list[BudgetExceptionRecord])
+def list_budget_exceptions(
+    policy_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return store.list_exceptions(policy_id)
+
+@app.post("/v1/exceptions/{exception_id}/approve", response_model=BudgetExceptionRecord)
+def approve_budget_exception(
+    exception_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    from src.db_models import BudgetExceptionStatus as DBBudgetExceptionStatus
+    store = DatabaseStore(db)
+    record = store.update_exception_status(exception_id, DBBudgetExceptionStatus.approved)
+    if not record:
+        raise HTTPException(status_code=404, detail="Exception request not found")
+    return record
+
+@app.post("/v1/exceptions/{exception_id}/deny", response_model=BudgetExceptionRecord)
+def deny_budget_exception(
+    exception_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    from src.db_models import BudgetExceptionStatus as DBBudgetExceptionStatus
+    store = DatabaseStore(db)
+    record = store.update_exception_status(exception_id, DBBudgetExceptionStatus.denied)
+    if not record:
+        raise HTTPException(status_code=404, detail="Exception request not found")
+    return record

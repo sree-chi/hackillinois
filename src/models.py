@@ -457,3 +457,20 @@ class AuditStatsResponse(BaseModel):
     total_spend_usd: float
     remaining_credit_usd: float | None = None
     policy_max_spend_usd: float | None = None
+
+class BudgetExceptionStatus(str, Enum):
+    pending = "pending"
+    approved = "approved"
+    denied = "denied"
+    used = "used"
+
+class BudgetExceptionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    policy_id: str
+    agent_wallet: str
+    amount_usd: float
+    status: BudgetExceptionStatus
+    created_at: datetime
+    updated_at: datetime | None = None

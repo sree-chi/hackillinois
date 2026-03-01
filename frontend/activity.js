@@ -66,6 +66,10 @@ const addAgentBtn = document.getElementById("add-agent-btn");
 const auditFeed = document.getElementById("audit-feed");
 const auditCount = document.getElementById("audit-count");
 
+const exceptionPanel = document.getElementById("exception-panel");
+const exceptionList = document.getElementById("exception-list");
+const exceptionCount = document.getElementById("exception-count");
+
 // ── Utilities ──────────────────────────────────────────────────────────────
 function esc(v) {
     return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -450,6 +454,61 @@ ksConfirmBtn.addEventListener("click", async () => {
     await loadAccountInfo();
 });
 
+// ── Budget Exceptions ──────────────────────────────────────────────────────
+async function loadExceptions() {
+    if (!STATE.policyId) return;
+    try {
+        const res = await apiFetch(`/v1/policies/${STATE.policyId}/exceptions`, {
+            headers: sessionHeaders()
+        });
+        const pending = res.filter(e => e.status === "pending");
+        renderExceptions(pending);
+    } catch (err) {
+        console.error("Failed to load exceptions", err);
+    }
+}
+
+function renderExceptions(pending) {
+    if (pending.length === 0) {
+        exceptionPanel.style.display = "none";
+        return;
+    }
+    exceptionPanel.style.display = "block";
+    exceptionCount.textContent = `${pending.length} pending`;
+
+    exceptionList.innerHTML = pending.map(e => `
+        <div class="audit-card">
+            <div class="audit-head">
+                <div class="audit-meta">
+                    <span class="audit-time">${timeAgo(e.created_at)}</span>
+                    <span class="audit-badge" style="background:#fce8e8;color:var(--danger)">needs approval</span>
+                </div>
+            </div>
+            <div class="audit-body" style="margin-top: 10px;">
+                <p><strong>Wallet:</strong> <span style="font-family:monospace; font-size:12px;">${e.agent_wallet}</span></p>
+                <p><strong>Amount:</strong> ${fmtUSD(e.amount_usd)}</p>
+                <div style="margin-top: 12px; display: flex; gap: 10px;">
+                    <button class="btn btn-outline" style="border-color:var(--success); color:var(--success);" onclick="handleException('${e.id}', 'approve')">Approve once</button>
+                    <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger);" onclick="handleException('${e.id}', 'deny')">Deny</button>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+
+window.handleException = async (exceptionId, action) => {
+    try {
+        await apiFetch(`/v1/exceptions/${exceptionId}/${action}`, {
+            method: "POST",
+            headers: sessionHeaders()
+        });
+        toast(`Exception ${action}d successfully.`, "success");
+        await loadExceptions();
+    } catch (err) {
+        toast(`Failed to ${action} exception: ${err.message}`, "error");
+    }
+};
+
 // ── Load All ───────────────────────────────────────────────────────────────
 async function loadDashboard() {
     const policyId = policySelect.value;
@@ -462,7 +521,7 @@ async function loadDashboard() {
     loadBtn.disabled = true;
     loadBtn.textContent = "Loading…";
     try {
-        await Promise.all([loadStats(), loadAudits()]);
+        await Promise.all([loadStats(), loadAudits(), loadExceptions()]);
         renderAgents();
         renderWalletBreakdown();
         toast("Dashboard loaded.", "success");

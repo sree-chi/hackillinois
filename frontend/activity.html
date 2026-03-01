@@ -822,21 +822,39 @@
             <!-- Two-col: Agents + Audit Feed -->
             <section class="gov-two-col">
 
-                <!-- Agent Identity -->
-                <section class="panel">
-                    <div class="gov-panel-head">
-                        <div class="section-heading" style="margin-bottom:0">
-                            <p class="eyebrow">Identity</p>
-                            <h2>Agents</h2>
+                <!-- Left Column -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <!-- Agent Identity -->
+                    <section class="panel">
+                        <div class="gov-panel-head">
+                            <div class="section-heading" style="margin-bottom:0">
+                                <p class="eyebrow">Identity</p>
+                                <h2>Agents</h2>
+                            </div>
+                            <span class="gov-panel-badge" id="agent-count">0 registered</span>
                         </div>
-                        <span class="gov-panel-badge" id="agent-count">0 registered</span>
-                    </div>
-                    <div class="gov-panel-body">
-                        <div id="agent-list">
-                            <div class="empty-state">Load dashboard to see linked wallets.</div>
+                        <div class="gov-panel-body">
+                            <div id="agent-list">
+                                <div class="empty-state">Load dashboard to see linked wallets.</div>
+                            </div>
                         </div>
-                    </div>
-                </section>
+                    </section>
+
+                    <!-- Pending Budget Approvals -->
+                    <section class="panel" id="exception-panel" style="display: none;">
+                        <div class="gov-panel-head">
+                            <div class="section-heading" style="margin-bottom:0">
+                                <p class="eyebrow" style="color:var(--danger)">Security</p>
+                                <h2>Pending Approvals</h2>
+                            </div>
+                            <span class="gov-panel-badge" id="exception-count"
+                                style="background:#fce8e8; color:var(--danger);">0 pending</span>
+                        </div>
+                        <div class="gov-panel-body">
+                            <div id="exception-list"></div>
+                        </div>
+                    </section>
+                </div>
 
                 <!-- Deep Audit Feed -->
                 <section class="panel">
