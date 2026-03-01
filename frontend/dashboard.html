@@ -14,14 +14,16 @@
 </head>
 
 <body>
+    <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
+    <div class="page-backdrop-title" data-background-title>Sentinel Auth</div>
     <div class="page-shell">
         <main class="layout">
             <nav class="topbar panel">
                 <a class="brand-link" href="/">Sentinel Auth</a>
                 <div class="topbar-links">
-                    <a class="topbar-link" href="/">Login</a>
-                    <a class="topbar-link topbar-link-active" href="/dashboard.html">Keys</a>
                     <a class="topbar-link" href="/activity.html">Dashboard</a>
+                    <a class="topbar-link topbar-link-active" href="/dashboard.html">Keys</a>
+                    <a class="topbar-link" href="/documentation/index.html">Documentation</a>
                     <a class="topbar-link" href="/agent.html">Agent Demo</a>
                 </div>
             </nav>
@@ -40,21 +42,29 @@
                                 <h3>Signed in as</h3>
                                 <code id="account-summary">Not signed in.</code>
                             </div>
+                            <div class="output-card compact-card compact-2fa-card">
+                                <h3>Verify Your Account 2FA</h3>
+                                <p id="phone-2fa-summary" class="muted">No verified phone number.</p>
+                            </div>
+                            <button id="open-phone-2fa-button" class="btn btn-secondary" type="button">Verify phone</button>
                             <button id="logout-button" class="btn btn-ghost" type="button" disabled>Logout</button>
                         </div>
                     </div>
                 </section>
 
-                <section class="grid">
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Security</p>
-                            <h2>Phone verification</h2>
+                <section id="phone-2fa-overlay" class="auth-overlay auth-overlay-hidden" aria-hidden="true">
+                    <div class="auth-backdrop"></div>
+                    <div class="auth-dialog panel phone-2fa-dialog">
+                        <div class="auth-dialog-header">
+                            <div>
+                                <p class="eyebrow">Security</p>
+                                <h2>Verify your account 2FA</h2>
+                            </div>
+                            <button id="close-phone-2fa-button" class="btn btn-ghost btn-close" type="button">Close</button>
                         </div>
                         <p class="muted">Optional 2FA setup. Verify a phone number on your account so you can use it as an additional security contact.</p>
                         <div class="output-card">
                             <h3>Current status</h3>
-                            <code id="phone-2fa-summary">No verified phone number.</code>
                             <p id="phone-2fa-status" class="muted">Request a code, then confirm it here. In mock mode the code is shown in the status message.</p>
                         </div>
                         <form id="phone-2fa-form" class="stack">
@@ -71,8 +81,10 @@
                                 <input id="phone-2fa-code" type="text" inputmode="numeric" placeholder="6-digit code" minlength="4" maxlength="12" required>
                             </label>
                         </form>
-                    </section>
+                    </div>
+                </section>
 
+                <section class="grid">
                     <section class="panel">
                         <div class="section-heading">
                             <p class="eyebrow">Account</p>
@@ -99,6 +111,16 @@
                                 <span>Owner name</span>
                                 <input id="owner-name" type="text" placeholder="Optional">
                             </label>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                                <label>
+                                    <span>Wallet label</span>
+                                    <input id="wallet-label" type="text" placeholder="e.g. GPT Agent" required>
+                                </label>
+                                <label>
+                                    <span>Wallet address</span>
+                                    <input id="wallet-address" type="text" placeholder="Solana address" required>
+                                </label>
+                            </div>
                             <label>
                                 <span>Use case</span>
                                 <textarea id="use-case" rows="4"
@@ -247,6 +269,7 @@
     </div>
 
     <script type="module" src="/dashboard.js"></script>
+    <script type="module" src="/background.js"></script>
 </body>
 
 </html>

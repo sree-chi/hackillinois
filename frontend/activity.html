@@ -684,15 +684,17 @@
 </head>
 
 <body>
+    <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
+    <div class="page-backdrop-title" data-background-title>Sentinel Auth</div>
     <div class="page-shell">
         <main class="layout">
             <!-- Nav -->
             <nav class="topbar panel">
                 <a class="brand-link" href="/">Sentinel Auth</a>
                 <div class="topbar-links">
-                    <a class="topbar-link" href="/">Login</a>
-                    <a class="topbar-link" href="/dashboard.html">Keys</a>
                     <a class="topbar-link topbar-link-active" href="/activity.html">Dashboard</a>
+                    <a class="topbar-link" href="/dashboard.html">Keys</a>
+                    <a class="topbar-link" href="/documentation/index.html">Documentation</a>
                     <a class="topbar-link" href="/agent.html">Agent Demo</a>
                 </div>
             </nav>
@@ -739,6 +741,16 @@
                                 <option value="">Select an API key first…</option>
                             </select>
                         </label>
+                    </div>
+                    <div id="full-key-input-container" class="is-hidden" style="margin-top: 14px;">
+                        <label>
+                            <span>Full API Key (Required for this device)</span>
+                            <input type="password" id="cfg-full-key-input" class="gov-select"
+                                style="width:100%; border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px;"
+                                placeholder="ska_live_...">
+                        </label>
+                        <p class="not-signed-in-hint" style="margin-top: 6px;">You haven't used this key on this device
+                            yet. Paste the full key to authorize the dashboard.</p>
                     </div>
                     <p id="not-signed-in-hint" class="not-signed-in-hint is-hidden">
                         ⚠️ You need to <a href="/">sign in</a> first. Your API keys and policies will appear here
@@ -811,28 +823,39 @@
             <!-- Two-col: Agents + Audit Feed -->
             <section class="gov-two-col">
 
-                <!-- Agent Identity -->
-                <section class="panel">
-                    <div class="gov-panel-head">
-                        <div class="section-heading" style="margin-bottom:0">
-                            <p class="eyebrow">Identity</p>
-                            <h2>Agents</h2>
+                <!-- Left Column -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <!-- Agent Identity -->
+                    <section class="panel">
+                        <div class="gov-panel-head">
+                            <div class="section-heading" style="margin-bottom:0">
+                                <p class="eyebrow">Identity</p>
+                                <h2>Agents</h2>
+                            </div>
+                            <span class="gov-panel-badge" id="agent-count">0 registered</span>
                         </div>
-                        <span class="gov-panel-badge" id="agent-count">0 registered</span>
-                    </div>
-                    <div class="gov-panel-body">
-                        <div class="agent-add-row">
-                            <input type="text" id="new-agent-name" placeholder="Agent name (required)" />
-                            <input type="text" id="new-agent-wallet" placeholder="Wallet address"
-                                style="max-width:170px;" />
-                            <button class="btn btn-primary" id="add-agent-btn"
-                                style="padding:10px 16px; font-size:0.88rem;">Add</button>
+                        <div class="gov-panel-body">
+                            <div id="agent-list">
+                                <div class="empty-state">Load dashboard to see linked wallets.</div>
+                            </div>
                         </div>
-                        <div id="agent-list">
-                            <div class="empty-state">Load dashboard to see registered agents.</div>
+                    </section>
+
+                    <!-- Pending Budget Approvals -->
+                    <section class="panel" id="exception-panel" style="display: none;">
+                        <div class="gov-panel-head">
+                            <div class="section-heading" style="margin-bottom:0">
+                                <p class="eyebrow" style="color:var(--danger)">Security</p>
+                                <h2>Pending Approvals</h2>
+                            </div>
+                            <span class="gov-panel-badge" id="exception-count"
+                                style="background:#fce8e8; color:var(--danger);">0 pending</span>
                         </div>
-                    </div>
-                </section>
+                        <div class="gov-panel-body">
+                            <div id="exception-list"></div>
+                        </div>
+                    </section>
+                </div>
 
                 <!-- Deep Audit Feed -->
                 <section class="panel">
@@ -876,6 +899,7 @@
 
     <div id="toast-stack"></div>
     <script type="module" src="./activity.js"></script>
+    <script type="module" src="./background.js"></script>
 </body>
 
 </html>

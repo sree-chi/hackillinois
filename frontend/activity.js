@@ -33,6 +33,8 @@ function resolveApiBase() {
 // ── DOM ────────────────────────────────────────────────────────────────────
 const apiKeySelect = document.getElementById("cfg-api-key-select");
 const policySelect = document.getElementById("cfg-policy-select");
+const fullKeyContainer = document.getElementById("full-key-input-container");
+const fullKeyInput = document.getElementById("cfg-full-key-input");
 const loadBtn = document.getElementById("load-btn");
 const notSignedHint = document.getElementById("not-signed-in-hint");
 const killSwitchBtn = document.getElementById("kill-switch-btn");
@@ -63,6 +65,10 @@ const addAgentBtn = document.getElementById("add-agent-btn");
 
 const auditFeed = document.getElementById("audit-feed");
 const auditCount = document.getElementById("audit-count");
+
+const exceptionPanel = document.getElementById("exception-panel");
+const exceptionList = document.getElementById("exception-list");
+const exceptionCount = document.getElementById("exception-count");
 
 // ── Utilities ──────────────────────────────────────────────────────────────
 function esc(v) {
@@ -114,9 +120,9 @@ function timeAgo(iso) {
 // ── Wallet name resolution ─────────────────────────────────────────────────
 function walletDisplayName(walletAddr) {
     if (!walletAddr) return null;
-    // Check agents first
-    const agent = STATE.agents.find(a => a.wallet_address === walletAddr);
-    if (agent) return agent.name;
+    // Check api keys first
+    const key = STATE.apiKeys.find(k => k.wallet_address === walletAddr && !k.revoked_at && !k.suspended_at);
+    if (key && key.wallet_label) return key.wallet_label;
     // Shorten address
     return walletAddr.substring(0, 6) + "…" + walletAddr.substring(walletAddr.length - 4);
 }
@@ -143,9 +149,96 @@ async function loadAccountInfo() {
         STATE.account = data.account;
         STATE.apiKeys = data.api_keys || [];
         accountChip.textContent = `${STATE.account.email}${STATE.account.full_name ? ' | ' + STATE.account.full_name : ''}`;
-        const hasActive = STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
-        killSwitchBtn.disabled = !hasActive;
-    } catch { /* session expired or no session */ }
+        killSwitchBtn.disabled = !STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
+
+        // Populate API key dropdown
+        populateApiKeyDropdown();
+    } catch {
+        notSignedHint.classList.remove("is-hidden");
+    }
+}
+
+function populateApiKeyDropdown() {
+    const activeKeys = STATE.apiKeys.filter(k => !k.revoked_at && !k.suspended_at);
+    if (!activeKeys.length) {
+        apiKeySelect.innerHTML = `<option value="">No active keys found</option>`;
+        return;
+    }
+    apiKeySelect.innerHTML = `<option value="">Choose an API key…</option>` +
+        activeKeys.map(k =>
+            `<option value="${esc(k.api_key_prefix)}" ${STATE.apiKey.startsWith(k.api_key_prefix.replace('…', '')) ? 'selected' : ''}>
+                ${esc(k.app_name)}${k.wallet_label ? ' \ud83d\udd17 ' + esc(k.wallet_label) : ''} — ${esc(k.api_key_prefix)}
+            </option>`
+        ).join("");
+
+    // If user already has a key stored and it matches a prefix, auto-select
+    if (STATE.apiKey) {
+        const match = activeKeys.find(k => STATE.apiKey.startsWith(k.api_key_prefix.replace('…', '')));
+        if (match) {
+            // The full key is stored in localStorage; set it as selected
+            for (const opt of apiKeySelect.options) {
+                if (opt.value === match.api_key_prefix) { opt.selected = true; break; }
+            }
+        }
+    }
+}
+
+// When API key is selected, fetch policies for that key
+apiKeySelect.addEventListener("change", async () => {
+    const prefix = apiKeySelect.value;
+    if (!prefix) {
+        policySelect.innerHTML = `<option value="">Select an API key first…</option>`;
+        fullKeyContainer.classList.add("is-hidden");
+        return;
+    }
+
+    // We need the FULL api key. If user has it stored and prefix matches, use it.
+    const cleanPrefix = prefix.replace('…', '');
+    if (STATE.apiKey && STATE.apiKey.startsWith(cleanPrefix)) {
+        fullKeyContainer.classList.add("is-hidden");
+        await loadPolicies();
+    } else {
+        // User doesn't have the full key stored for this selection.
+        policySelect.innerHTML = `<option value="">Waiting for full API key…</option>`;
+        fullKeyContainer.classList.remove("is-hidden");
+        fullKeyInput.value = "";
+        fullKeyInput.focus();
+    }
+});
+
+fullKeyInput.addEventListener("input", async () => {
+    const val = fullKeyInput.value.trim();
+    const prefix = apiKeySelect.value;
+    if (!prefix) return;
+
+    if (val.startsWith(prefix.replace('…', ''))) {
+        STATE.apiKey = val;
+        localStorage.setItem(STORAGE_KEYS.apiKey, val);
+        fullKeyContainer.classList.add("is-hidden");
+        toast("API key authorized for this device.", "success");
+        await loadPolicies();
+    }
+});
+
+async function loadPolicies() {
+    policySelect.innerHTML = `<option value="">Loading policies…</option>`;
+    try {
+        const data = await apiFetch("/v1/policies", { headers: apiHeaders() });
+        STATE.policies = data.data || [];
+        if (!STATE.policies.length) {
+            policySelect.innerHTML = `<option value="">No policies found. Create one on the Keys page.</option>`;
+            return;
+        }
+        policySelect.innerHTML = `<option value="">Choose a policy…</option>` +
+            STATE.policies.map(p =>
+                `<option value="${esc(p.id)}" ${p.id === STATE.policyId ? 'selected' : ''}>
+                    ${esc(p.name)} — ${esc(p.id)}
+                </option>`
+            ).join("");
+    } catch (err) {
+        policySelect.innerHTML = `<option value="">Failed to load policies</option>`;
+        toast(`Policies: ${err.message}`, "error");
+    }
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────────
@@ -213,78 +306,42 @@ function renderWalletBreakdown() {
 }
 
 // ── Agents ─────────────────────────────────────────────────────────────────
-async function loadAgents() {
-    if (!STATE.sessionToken) return;
-    try {
-        STATE.agents = await apiFetch("/v1/agents", {
-            headers: { Authorization: `Bearer ${STATE.sessionToken}` },
-        });
-    } catch { STATE.agents = []; }
-    renderAgents();
-}
-
-function agentIsActive(agent) {
+function agentIsActive(walletAddr) {
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-    return STATE.allAudits.some(a => {
-        const m1 = agent.wallet_address && a.agent_wallet === agent.wallet_address;
-        const m2 = a.requester?.toLowerCase().includes(agent.name.toLowerCase().replace(/\s+/g, "_"));
-        return (m1 || m2) && new Date(a.created_at).getTime() > fiveMinAgo;
-    });
+    return STATE.allAudits.some(a =>
+        a.agent_wallet === walletAddr && new Date(a.created_at).getTime() > fiveMinAgo
+    );
 }
 
 function renderAgents() {
-    agentCount.textContent = `${STATE.agents.length} registered`;
-    if (!STATE.agents.length) {
-        agentList.innerHTML = `<div class="empty-state">No agents registered yet. Add one above.</div>`;
+    // Get unique wallets from active API keys
+    const agentsMap = new Map();
+    for (const k of STATE.apiKeys) {
+        if (!k.revoked_at && !k.suspended_at && k.wallet_address) {
+            if (!agentsMap.has(k.wallet_address)) {
+                agentsMap.set(k.wallet_address, k.wallet_label || "Unnamed Agent");
+            }
+        }
+    }
+    const agents = Array.from(agentsMap.entries());
+
+    agentCount.textContent = `${agents.length} linked`;
+    if (!agents.length) {
+        agentList.innerHTML = `<div class="empty-state">No wallets linked to your active keys.</div>`;
         return;
     }
-    agentList.innerHTML = STATE.agents.map(a => {
-        const active = agentIsActive(a);
+    agentList.innerHTML = agents.map(([wallet, label]) => {
+        const active = agentIsActive(wallet);
         return `
         <div class="agent-row">
             <div class="agent-status-dot ${active ? "dot-active" : "dot-idle"}"></div>
             <div class="agent-info">
-                <div class="agent-name">${esc(a.name)}</div>
-                <div class="agent-wallet-addr">${a.wallet_address ? esc(a.wallet_address) : "No wallet linked"}</div>
+                <div class="agent-name">${esc(label)}</div>
+                <div class="agent-wallet-addr" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem">${esc(wallet)}</div>
             </div>
-            <button class="btn-remove" data-delete-agent="${esc(a.agent_id)}">Remove</button>
         </div>`;
     }).join("");
 }
-
-addAgentBtn.addEventListener("click", async () => {
-    const name = newAgentName.value.trim();
-    const wallet = newAgentWallet.value.trim() || null;
-    if (!name) { toast("Agent name is required.", "error"); return; }
-    if (!wallet) { toast("Wallet address is required to track spending.", "error"); return; }
-    if (!STATE.sessionToken) { toast("Sign in to register agents.", "error"); return; }
-    addAgentBtn.disabled = true;
-    try {
-        await apiFetch("/v1/agents", {
-            method: "POST",
-            headers: sessionHeaders(),
-            body: JSON.stringify({ name, wallet_address: wallet }),
-        });
-        newAgentName.value = "";
-        newAgentWallet.value = "";
-        await loadAgents();
-        renderWalletBreakdown(); // Re-render with new names
-        renderAuditFeed();       // Re-render wallet tags
-        toast(`Agent "${name}" registered.`, "success");
-    } catch (err) { toast(`Failed: ${err.message}`, "error"); }
-    finally { addAgentBtn.disabled = false; }
-});
-
-agentList.addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-delete-agent]");
-    if (!btn) return;
-    btn.disabled = true;
-    try {
-        await apiFetch(`/v1/agents/${btn.dataset.deleteAgent}`, { method: "DELETE", headers: sessionHeaders() });
-        await loadAgents();
-        toast("Agent removed.", "info");
-    } catch (err) { btn.disabled = false; toast(`Failed: ${err.message}`, "error"); }
-});
 
 // ── Audit Feed ─────────────────────────────────────────────────────────────
 async function loadAudits() {
@@ -397,6 +454,61 @@ ksConfirmBtn.addEventListener("click", async () => {
     await loadAccountInfo();
 });
 
+// ── Budget Exceptions ──────────────────────────────────────────────────────
+async function loadExceptions() {
+    if (!STATE.policyId) return;
+    try {
+        const res = await apiFetch(`/v1/policies/${STATE.policyId}/exceptions`, {
+            headers: sessionHeaders()
+        });
+        const pending = res.filter(e => e.status === "pending");
+        renderExceptions(pending);
+    } catch (err) {
+        console.error("Failed to load exceptions", err);
+    }
+}
+
+function renderExceptions(pending) {
+    if (pending.length === 0) {
+        exceptionPanel.style.display = "none";
+        return;
+    }
+    exceptionPanel.style.display = "block";
+    exceptionCount.textContent = `${pending.length} pending`;
+
+    exceptionList.innerHTML = pending.map(e => `
+        <div class="audit-card">
+            <div class="audit-head">
+                <div class="audit-meta">
+                    <span class="audit-time">${timeAgo(e.created_at)}</span>
+                    <span class="audit-badge" style="background:#fce8e8;color:var(--danger)">needs approval</span>
+                </div>
+            </div>
+            <div class="audit-body" style="margin-top: 10px;">
+                <p><strong>Wallet:</strong> <span style="font-family:monospace; font-size:12px;">${e.agent_wallet}</span></p>
+                <p><strong>Amount:</strong> ${fmtUSD(e.amount_usd)}</p>
+                <div style="margin-top: 12px; display: flex; gap: 10px;">
+                    <button class="btn btn-outline" style="border-color:var(--success); color:var(--success);" onclick="handleException('${e.id}', 'approve')">Approve once</button>
+                    <button class="btn btn-outline" style="border-color:var(--danger); color:var(--danger);" onclick="handleException('${e.id}', 'deny')">Deny</button>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+
+window.handleException = async (exceptionId, action) => {
+    try {
+        await apiFetch(`/v1/exceptions/${exceptionId}/${action}`, {
+            method: "POST",
+            headers: sessionHeaders()
+        });
+        toast(`Exception ${action}d successfully.`, "success");
+        await loadExceptions();
+    } catch (err) {
+        toast(`Failed to ${action} exception: ${err.message}`, "error");
+    }
+};
+
 // ── Load All ───────────────────────────────────────────────────────────────
 async function loadDashboard() {
     const policyId = policySelect.value;
@@ -409,8 +521,8 @@ async function loadDashboard() {
     loadBtn.disabled = true;
     loadBtn.textContent = "Loading…";
     try {
-        await Promise.all([loadStats(), loadAudits()]);
-        await loadAgents();
+        await Promise.all([loadStats(), loadAudits(), loadExceptions()]);
+        renderAgents();
         renderWalletBreakdown();
         toast("Dashboard loaded.", "success");
     } catch (err) {

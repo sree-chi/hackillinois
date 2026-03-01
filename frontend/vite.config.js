@@ -19,7 +19,7 @@ export default defineConfig({
                 activity: resolve(__dirname, 'activity.html'),
                 agent: resolve(__dirname, 'agent.html'),
                 enterprise: resolve(__dirname, 'enterprise.html'),
-                openaidocs: resolve(__dirname, 'open-ai-docs/index.html'),
+                openaidocs: resolve(__dirname, 'documentation/index.html'),
             },
         },
     },
