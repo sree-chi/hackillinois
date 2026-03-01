@@ -1027,12 +1027,15 @@ def authorize(
             severity="high",
             explanation="This target service is not trusted to execute actions under the policy.",
         )
-    elif rules.max_spend_usd is not None and (payload.action.amount_usd or 0) > rules.max_spend_usd:
-        violation = SafetyViolation(
-            category="spend_limit_exceeded",
-            severity="high",
-            explanation="The proposed action exceeds the policy maximum spend limit.",
-        )
+    elif rules.max_spend_usd is not None:
+        total_spend = store.get_total_spend_usd(payload.policy_id)
+        projected_spend = total_spend + (payload.action.amount_usd or 0)
+        if projected_spend > rules.max_spend_usd:
+            violation = SafetyViolation(
+                category="spend_limit_exceeded",
+                severity="high",
+                explanation=f"The proposed action (${payload.action.amount_usd or 0:.2f}) would exceed the policy's remaining budget of ${max(0, rules.max_spend_usd - total_spend):.2f}.",
+            )
     elif (
         rules.requires_human_approval_for_delete
         and method == "DELETE"
