@@ -130,6 +130,7 @@ class AccountPhoneVerificationModel(Base):
     __tablename__ = "account_phone_verifications"
 
     verification_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=True, index=True)
     phone_number = Column(String(20), nullable=False, index=True)
     code_hash = Column(String(64), nullable=False)
     full_name = Column(String(100), nullable=True)

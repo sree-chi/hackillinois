@@ -96,6 +96,7 @@ class DatabaseStore:
 
     def create_phone_verification(
         self,
+        account_id: str | None,
         phone_number: str,
         code_hash: str,
         full_name: str | None,
@@ -104,6 +105,7 @@ class DatabaseStore:
     ) -> AccountPhoneVerificationModel:
         row = AccountPhoneVerificationModel(
             verification_id=new_id("pvc"),
+            account_id=account_id,
             phone_number=phone_number,
             code_hash=code_hash,
             full_name=full_name,
@@ -115,13 +117,15 @@ class DatabaseStore:
         self.db.refresh(row)
         return row
 
-    def get_latest_phone_verification(self, phone_number: str) -> AccountPhoneVerificationModel | None:
-        return (
-            self.db.query(AccountPhoneVerificationModel)
-            .filter(AccountPhoneVerificationModel.phone_number == phone_number)
-            .order_by(AccountPhoneVerificationModel.created_at.desc())
-            .first()
-        )
+    def get_latest_phone_verification(
+        self,
+        phone_number: str,
+        account_id: str | None = None,
+    ) -> AccountPhoneVerificationModel | None:
+        query = self.db.query(AccountPhoneVerificationModel).filter(AccountPhoneVerificationModel.phone_number == phone_number)
+        if account_id is not None:
+            query = query.filter(AccountPhoneVerificationModel.account_id == account_id)
+        return query.order_by(AccountPhoneVerificationModel.created_at.desc()).first()
 
     def consume_phone_verification(self, verification_id: str) -> None:
         row = (
@@ -133,6 +137,15 @@ class DatabaseStore:
             return
         row.consumed_at = datetime.now(timezone.utc)
         self.db.commit()
+
+    def update_account_phone_number(self, account_id: str, phone_number: str | None) -> AccountRecord | None:
+        row = self.db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
+        if not row:
+            return None
+        row.phone_number = phone_number
+        self.db.commit()
+        self.db.refresh(row)
+        return AccountRecord.model_validate(row)
 
     def create_wallet_link_challenge(
         self,

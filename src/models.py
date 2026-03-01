@@ -122,15 +122,24 @@ class IssueApiKeyRequest(BaseModel):
     use_case: str | None = Field(default=None, max_length=500)
 
 
+class RegisterAccountRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+    full_name: str | None = Field(default=None, max_length=100)
+
+
+class LoginAccountRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+
+
 class RequestPhoneCodeRequest(BaseModel):
     phone_number: str = Field(min_length=8, max_length=30)
-    full_name: str | None = Field(default=None, max_length=100)
 
 
 class VerifyPhoneCodeRequest(BaseModel):
     phone_number: str = Field(min_length=8, max_length=30)
     code: str = Field(min_length=4, max_length=12)
-    full_name: str | None = Field(default=None, max_length=100)
 
 
 class WalletLinkChallengeRequest(BaseModel):

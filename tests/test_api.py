@@ -68,23 +68,15 @@ def create_default_policy() -> str:
 
 
 def create_account_session() -> str:
-    request_code = client.post(
-        "/v1/accounts/auth/request-code",
-        json={
-            "phone_number": "+1 312 555 0100",
-            "full_name": "Portal Owner",
-        },
-    )
-    assert request_code.status_code == 201
     response = client.post(
-        "/v1/accounts/auth/verify-code",
+        "/v1/accounts/register",
         json={
-            "phone_number": "+1 312 555 0100",
-            "code": request_code.json()["dev_code"],
+            "email": "owner@example.com",
+            "password": "strong-password-123",
             "full_name": "Portal Owner",
         },
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     return response.json()["session_token"]
 
 
@@ -103,28 +95,28 @@ def issue_public_key() -> str:
     return response.json()["api_key"]
 
 
-def test_phone_verification_returns_session():
+def test_account_can_verify_phone_number_after_login():
+    session_token = create_account_session()
     request_code = client.post(
-        "/v1/accounts/auth/request-code",
+        "/v1/accounts/me/phone-2fa/request-code",
+        headers={"Authorization": f"Bearer {session_token}"},
         json={
             "phone_number": "(312) 555-0199",
-            "full_name": "Founder",
         },
     )
     assert request_code.status_code == 201
     response = client.post(
-        "/v1/accounts/auth/verify-code",
+        "/v1/accounts/me/phone-2fa/verify-code",
+        headers={"Authorization": f"Bearer {session_token}"},
         json={
             "phone_number": "(312) 555-0199",
             "code": request_code.json()["dev_code"],
-            "full_name": "Founder",
         },
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["session_token"].startswith("ssa_live_")
-    assert body["account"]["phone_number"] == "+13125550199"
+    assert body["phone_number"] == "+13125550199"
 
 
 def test_account_dashboard_lists_issued_keys():
@@ -146,7 +138,7 @@ def test_account_dashboard_lists_issued_keys():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["account"]["phone_number"] == "+13125550100"
+    assert body["account"]["email"] == "owner@example.com"
     assert body["api_keys"][0]["app_name"] == "Public Portal App"
     assert body["linked_wallets"] == []
 

@@ -21,15 +21,6 @@ const loginPanel = document.getElementById("login-panel");
 const registerPanel = document.getElementById("register-panel");
 const loginForm = document.getElementById("login-form");
 const registerForm = document.getElementById("register-form");
-const loginCodeShell = document.getElementById("login-code-shell");
-const registerCodeShell = document.getElementById("register-code-shell");
-const loginVerifyButton = document.getElementById("login-verify-button");
-const registerVerifyButton = document.getElementById("register-verify-button");
-
-const authFlowState = {
-    login: { phoneNumber: "" },
-    register: { phoneNumber: "" },
-};
 
 const pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, active: false };
 const particles = [];
@@ -180,8 +171,8 @@ function setActiveTab(mode) {
     loginPanel.classList.toggle("auth-panel-hidden", !loginActive);
     registerPanel.classList.toggle("auth-panel-hidden", loginActive);
     authStatus.textContent = loginActive
-        ? "Enter your phone number to receive a temporary login code."
-        : "Create an account with your phone number and verify the temporary code.";
+        ? "Enter your account credentials to continue to the dashboard."
+        : "Create an account to generate keys and manage policies.";
 }
 
 function launchAuth(button, mode) {
@@ -230,27 +221,6 @@ async function authenticate(path, payload, successMessage) {
     }, 420);
 }
 
-async function requestPhoneCode(mode, payload) {
-    const response = await fetch(`${resolveApiBase()}/v1/accounts/auth/request-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-    });
-    const data = await readApiResponse(response);
-    if (!response.ok) {
-        throw new Error(data.detail?.error?.message || data.message || JSON.stringify(data));
-    }
-
-    authFlowState[mode].phoneNumber = data.phone_number;
-    const codeMessage = data.dev_code ? ` Code: ${data.dev_code}` : "";
-    authStatus.textContent = `Code sent to ${data.phone_number} via ${data.delivery_channel}.${codeMessage}`;
-    if (mode === "login") {
-        loginCodeShell.classList.remove("auth-panel-hidden");
-    } else {
-        registerCodeShell.classList.remove("auth-panel-hidden");
-    }
-}
-
 launchLoginButton.addEventListener("click", () => launchAuth(launchLoginButton, "login"));
 launchRegisterButton.addEventListener("click", () => launchAuth(launchRegisterButton, "register"));
 
@@ -260,47 +230,24 @@ showRegisterTab.addEventListener("click", () => setActiveTab("register"));
 
 loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    authStatus.textContent = "Sending login code...";
+    authStatus.textContent = "Signing in...";
     try {
-        await requestPhoneCode("login", {
-            phone_number: document.getElementById("login-phone-number").value.trim(),
-        });
-    } catch (error) {
-        authStatus.textContent = `Unable to send login code: ${error.message}`;
-    }
-});
-
-registerForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    authStatus.textContent = "Sending account code...";
-    try {
-        await requestPhoneCode("register", {
-            phone_number: document.getElementById("register-phone-number").value.trim(),
-            full_name: document.getElementById("register-full-name").value.trim() || null,
-        });
-    } catch (error) {
-        authStatus.textContent = `Unable to send account code: ${error.message}`;
-    }
-});
-
-loginVerifyButton.addEventListener("click", async () => {
-    authStatus.textContent = "Verifying login code...";
-    try {
-        await authenticate("/v1/accounts/auth/verify-code", {
-            phone_number: authFlowState.login.phoneNumber || document.getElementById("login-phone-number").value.trim(),
-            code: document.getElementById("login-code").value.trim(),
+        await authenticate("/v1/accounts/login", {
+            email: document.getElementById("login-email").value.trim(),
+            password: document.getElementById("login-password").value,
         }, "Login successful. Redirecting to the dashboard...");
     } catch (error) {
         authStatus.textContent = `Login failed: ${error.message}`;
     }
 });
 
-registerVerifyButton.addEventListener("click", async () => {
-    authStatus.textContent = "Verifying account code...";
+registerForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    authStatus.textContent = "Creating account...";
     try {
-        await authenticate("/v1/accounts/auth/verify-code", {
-            phone_number: authFlowState.register.phoneNumber || document.getElementById("register-phone-number").value.trim(),
-            code: document.getElementById("register-code").value.trim(),
+        await authenticate("/v1/accounts/register", {
+            email: document.getElementById("register-email").value.trim(),
+            password: document.getElementById("register-password").value,
             full_name: document.getElementById("register-full-name").value.trim() || null,
         }, "Account created. Redirecting to the dashboard...");
     } catch (error) {

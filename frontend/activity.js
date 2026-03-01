@@ -82,7 +82,7 @@ async function apiFetch(path, opts = {}) {
 
 function apiHeaders() { return { Authorization: `Bearer ${STATE.apiKey}`, "Content-Type": "application/json" }; }
 function sessionHeaders() { return { Authorization: `Bearer ${STATE.sessionToken}`, "Content-Type": "application/json" }; }
-function accountIdentity(account) { return account.phone_number || account.email; }
+function accountIdentity(account) { return account.email || account.phone_number; }
 
 function toast(msg, type = "info") {
     const el = document.createElement("div");

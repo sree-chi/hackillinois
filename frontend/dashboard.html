@@ -48,6 +48,33 @@
                 <section class="grid">
                     <section class="panel">
                         <div class="section-heading">
+                            <p class="eyebrow">Security</p>
+                            <h2>Phone verification</h2>
+                        </div>
+                        <p class="muted">Optional 2FA setup. Verify a phone number on your account so you can use it as an additional security contact.</p>
+                        <div class="output-card">
+                            <h3>Current status</h3>
+                            <code id="phone-2fa-summary">No verified phone number.</code>
+                            <p id="phone-2fa-status" class="muted">Request a code, then confirm it here. In mock mode the code is shown in the status message.</p>
+                        </div>
+                        <form id="phone-2fa-form" class="stack">
+                            <label>
+                                <span>Phone number</span>
+                                <input id="phone-2fa-number" type="tel" placeholder="+1 555 555 5555" required>
+                            </label>
+                            <div class="action-row">
+                                <button id="phone-2fa-request-button" class="btn btn-secondary" type="button">Send code</button>
+                                <button id="phone-2fa-verify-button" class="btn btn-primary" type="submit">Verify code</button>
+                            </div>
+                            <label>
+                                <span>Verification code</span>
+                                <input id="phone-2fa-code" type="text" inputmode="numeric" placeholder="6-digit code" minlength="4" maxlength="12" required>
+                            </label>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
                             <p class="eyebrow">Account</p>
                             <h2>Issued API keys</h2>
                         </div>
