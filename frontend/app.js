@@ -248,19 +248,21 @@ function updateSnippets() {
 }
 
 function renderApiKeys(apiKeys) {
-    if (!apiKeys.length) {
+    const visibleKeys = apiKeys.filter((entry) => !entry.revoked_at);
+
+    if (!visibleKeys.length) {
         apiKeyList.innerHTML = '<div class="empty-state">No keys issued yet.</div>';
         return;
     }
 
-    apiKeyList.innerHTML = apiKeys.map((entry) => `
+    apiKeyList.innerHTML = visibleKeys.map((entry) => `
         <article class="activity-card activity-success">
             <div class="activity-header">
-                <div>
+                <div class="activity-copy">
                     <p class="activity-title">${entry.app_name}</p>
                     <p class="activity-meta">${entry.owner_email} | Created ${new Date(entry.created_at).toLocaleString()}</p>
                 </div>
-                <div class="action-row">
+                <div class="action-row action-row-wrap">
                     <span class="status-pill ${entry.revoked_at ? "status-danger" : entry.suspended_at ? "status-warning" : "status-success"}">
                         ${entry.revoked_at ? "revoked" : entry.suspended_at ? "suspended" : "active"}
                     </span>
@@ -505,14 +507,19 @@ apiKeyList.addEventListener("click", async (event) => {
             throw new Error(JSON.stringify(data));
         }
 
-        if (currentApiKey && currentIssuedClientId === clientId) {
-            if (button.dataset.revokeKey) {
+        if (button.dataset.revokeKey) {
+            const isCurrentIssuedKey = currentIssuedClientId === clientId;
+            if (isCurrentIssuedKey) {
                 currentApiKey = "";
                 currentIssuedClientId = "";
                 localStorage.removeItem(STORAGE_KEYS.apiKey);
                 issuedKey.textContent = "Key deleted.";
                 issuedKeyMeta.textContent = "The selected API key was permanently revoked.";
-            } else if (button.dataset.suspendKey) {
+            }
+        }
+
+        if (currentApiKey && currentIssuedClientId === clientId) {
+            if (button.dataset.suspendKey) {
                 issuedKeyMeta.textContent = "The selected API key is temporarily disabled.";
             } else if (button.dataset.restoreKey) {
                 issuedKeyMeta.textContent = "The selected API key is active again.";

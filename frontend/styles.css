@@ -246,6 +246,9 @@ textarea {
     font-weight: 700;
     cursor: pointer;
     transition: transform 0.18s ease, background-color 0.18s ease, opacity 0.18s ease;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
 }
 
 .btn:hover:not(:disabled) {
@@ -299,6 +302,11 @@ textarea {
     gap: 12px;
 }
 
+.action-row-wrap {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
 .summary-grid,
 .activity-grid {
     display: grid;
@@ -319,6 +327,7 @@ textarea {
     background: rgba(255, 255, 255, 0.56);
     border-radius: 18px;
     padding: 16px;
+    min-width: 0;
 }
 
 .summary-card strong {
@@ -389,6 +398,7 @@ textarea {
     padding: 20px;
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.68);
+    min-width: 0;
 }
 
 .activity-success {
@@ -406,19 +416,29 @@ textarea {
     align-items: flex-start;
 }
 
+.activity-copy {
+    min-width: 0;
+    flex: 1 1 260px;
+}
+
 .activity-title {
     font-size: 1.05rem;
     font-weight: 700;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .activity-title span {
     color: var(--muted);
     font-weight: 500;
+    overflow-wrap: anywhere;
 }
 
 .activity-meta {
     margin-top: 6px;
     color: var(--muted);
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .activity-message {
@@ -426,6 +446,8 @@ textarea {
     margin-bottom: 16px;
     font-size: 1rem;
     line-height: 1.6;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .status-pill {
@@ -435,6 +457,9 @@ textarea {
     text-transform: uppercase;
     letter-spacing: 0.12em;
     font-weight: 700;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: center;
 }
 
 .status-success {
@@ -469,6 +494,7 @@ textarea {
     margin-top: 10px;
     color: var(--muted);
     line-height: 1.6;
+    overflow-wrap: anywhere;
 }
 
 .console {
@@ -517,6 +543,7 @@ textarea {
 
 a {
     color: var(--primary-dark);
+    overflow-wrap: anywhere;
 }
 
 @media (max-width: 960px) {
