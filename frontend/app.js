@@ -59,22 +59,35 @@ function resizeCanvas() {
 function seedParticles() {
     particles.length = 0;
     for (let index = 0; index < PARTICLE_COUNT; index += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const spread = Math.pow(Math.random(), 0.72);
+        const radius = Math.max(canvasWidth, canvasHeight) * (0.1 + spread * 0.68);
+        const depth = 0.35 + Math.random() * 1.5;
         particles.push({
-            anchorX: Math.random() * canvasWidth,
-            anchorY: Math.random() * canvasHeight,
-            x: Math.random() * canvasWidth,
-            y: Math.random() * canvasHeight,
+            angle,
+            radius,
+            depth,
+            length: 1.5 + depth * 3.8,
+            width: 0.7 + Math.random() * 1.8,
+            x: canvasWidth / 2,
+            y: canvasHeight / 2,
             vx: 0,
             vy: 0,
-            size: 3 + Math.random() * 8,
-            depth: 0.35 + Math.random() * 1.4,
-            alpha: 0.2 + Math.random() * 0.35,
+            alpha: 0.26 + Math.random() * 0.4,
+            hue: 220 + Math.sin(angle * 1.7) * 45 + Math.cos(angle * 2.3) * 18,
         });
     }
 }
 
 function animateParticles() {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+    const normalizedX = pointer.active ? (pointer.x - centerX) / centerX : 0;
+    const normalizedY = pointer.active ? (pointer.y - centerY) / centerY : 0;
+    const tiltX = normalizedX * 42;
+    const tiltY = normalizedY * 30;
 
     for (const particle of particles) {
         if (rushMode && rushTarget) {
@@ -85,45 +98,35 @@ function animateParticles() {
             particle.vx *= 0.84;
             particle.vy *= 0.84;
         } else {
-            const offsetX = pointer.active ? (pointer.x - canvasWidth / 2) * 0.055 * particle.depth : 0;
-            const offsetY = pointer.active ? (pointer.y - canvasHeight / 2) * 0.055 * particle.depth : 0;
-            const targetX = particle.anchorX + offsetX;
-            const targetY = particle.anchorY + offsetY;
+            const baseX = Math.cos(particle.angle) * particle.radius;
+            const baseY = Math.sin(particle.angle) * particle.radius;
+            const projectedX = baseX + tiltX * particle.depth;
+            const projectedY = baseY + tiltY * particle.depth + baseX * normalizedY * 0.04;
+            const perspective = 1 + ((Math.cos(particle.angle) * normalizedX) + (Math.sin(particle.angle) * normalizedY)) * 0.14 * particle.depth;
+            const targetX = centerX + projectedX * perspective;
+            const targetY = centerY + projectedY * perspective;
 
             particle.vx += (targetX - particle.x) * 0.075;
             particle.vy += (targetY - particle.y) * 0.075;
-            particle.vx *= 0.8;
-            particle.vy *= 0.8;
+            particle.vx *= 0.78;
+            particle.vy *= 0.78;
         }
 
         particle.x += particle.vx;
         particle.y += particle.vy;
 
-        const radius = particle.size * (0.55 + particle.depth * 0.42);
-        const highlightX = particle.x - radius * 0.32;
-        const highlightY = particle.y - radius * 0.32;
+        const streakAngle = particle.angle + normalizedX * 0.18 - normalizedY * 0.12;
+        const length = particle.length * (0.82 + particle.depth * 0.22);
+        const width = particle.width * (0.9 + particle.depth * 0.12);
 
-        const bubbleFill = ctx.createRadialGradient(
-            highlightX,
-            highlightY,
-            radius * 0.18,
-            particle.x,
-            particle.y,
-            radius * 1.15,
-        );
-        bubbleFill.addColorStop(0, `rgba(255, 251, 243, ${particle.alpha + 0.26})`);
-        bubbleFill.addColorStop(0.42, `rgba(231, 210, 179, ${particle.alpha + 0.16})`);
-        bubbleFill.addColorStop(1, `rgba(168, 128, 78, ${particle.alpha})`);
-
+        ctx.save();
+        ctx.translate(particle.x, particle.y);
+        ctx.rotate(streakAngle);
+        ctx.fillStyle = `hsla(${particle.hue}, 78%, 56%, ${particle.alpha})`;
         ctx.beginPath();
-        ctx.fillStyle = bubbleFill;
-        ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+        ctx.roundRect(-length / 2, -width / 2, length, width, width);
         ctx.fill();
-
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(255, 255, 255, ${particle.alpha + 0.18})`;
-        ctx.arc(highlightX, highlightY, Math.max(1.2, radius * 0.24), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.restore();
     }
 
     requestAnimationFrame(animateParticles);
