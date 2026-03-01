@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 POLICY_SCHEMA_VERSION = "sentinel-policy/v1"
 
@@ -497,11 +497,13 @@ class AuditStatsResponse(BaseModel):
     remaining_credit_usd: float | None = None
     policy_max_spend_usd: float | None = None
 
+
 class BudgetExceptionStatus(str, Enum):
     pending = "pending"
     approved = "approved"
     denied = "denied"
     used = "used"
+
 
 class BudgetExceptionRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
