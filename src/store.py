@@ -620,6 +620,13 @@ class DatabaseStore:
             AuditRecordModel.created_at >= one_minute_ago,
         ).count()
 
+    def get_total_spend_usd(self, policy_id: str) -> float:
+        result = self.db.query(sql_func.sum(AuditRecordModel.amount_usd)).filter(
+            AuditRecordModel.policy_id == policy_id,
+            AuditRecordModel.status == AuditStatusEnum.allowed,
+        ).scalar()
+        return float(result) if result else 0.0
+
     # ── Agent Identity ─────────────────────────────────────────────────────
 
     def create_agent(self, payload: CreateAgentRequest, account_id: str) -> AgentRecord:
