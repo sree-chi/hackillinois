@@ -25,9 +25,9 @@ body {
     font-family: "Space Grotesk", sans-serif;
     color: var(--text);
     background:
-        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 28%),
-        radial-gradient(circle at 50% 50%, rgba(215, 202, 184, 0.28), rgba(215, 202, 184, 0) 54%),
-        linear-gradient(180deg, #f7f4ef 0%, #f0ebe3 55%, #e9e2d8 100%);
+        radial-gradient(circle at 30% 22%, rgba(241, 228, 204, 0.9), rgba(241, 228, 204, 0) 30%),
+        radial-gradient(circle at 72% 32%, rgba(224, 205, 174, 0.72), rgba(224, 205, 174, 0) 36%),
+        linear-gradient(180deg, #f1e3ca 0%, #ead9bc 54%, #e2cfaf 100%);
 }
 
 .login-body {
@@ -82,7 +82,7 @@ textarea {
     font-size: clamp(4.4rem, 13vw, 10.5rem);
     font-weight: 800;
     letter-spacing: -0.06em;
-    color: rgba(175, 145, 104, 0.22);
+    color: rgba(49, 48, 46, 0.28);
     text-transform: uppercase;
     transform-style: preserve-3d;
     transition: transform 120ms ease-out;
@@ -90,8 +90,8 @@ textarea {
     white-space: nowrap;
     padding: 0.16em 0.34em 0.22em;
     border-radius: 999px;
-    background: rgba(255, 249, 240, 0.18);
-    border: 1px solid rgba(182, 132, 82, 0.08);
+    background: rgba(244, 232, 210, 0.4);
+    border: 1px solid rgba(133, 114, 87, 0.12);
     box-shadow:
         0 24px 70px rgba(94, 64, 31, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.34);
