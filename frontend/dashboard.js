@@ -789,8 +789,9 @@ if (pricingForm) {
             });
 
             if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.detail?.message || "Failed to save pricing");
+                let msg = `Server error (${res.status})`;
+                try { const errData = await res.json(); msg = errData.detail?.message || errData.detail || msg; } catch (_) { }
+                throw new Error(msg);
             }
 
             pricingStatus.textContent = "Saved successfully!";

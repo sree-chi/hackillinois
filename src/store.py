@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.db_models import (
     AccountApiClientModel,
+    AccountApiPricingModel,
     AccountModel,
     AccountPhoneVerificationModel,
     AccountSessionModel,
@@ -414,7 +415,6 @@ class DatabaseStore:
             self.db.refresh(row)
         return ApiClientRecord.model_validate(row)
     def get_api_pricing(self, client_id: str, api_link: str):
-        from src.db_models import AccountApiPricingModel
         return (
             self.db.query(AccountApiPricingModel)
             .filter(
@@ -425,7 +425,6 @@ class DatabaseStore:
         )
 
     def list_api_pricing(self, client_id: str):
-        from src.db_models import AccountApiPricingModel
         return (
             self.db.query(AccountApiPricingModel)
             .filter(

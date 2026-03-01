@@ -33,6 +33,7 @@ from src.auth import (
     verify_password,
 )
 from src.database import Base, engine, get_db
+from src.db_models import AccountApiPricingModel  # noqa: F401 — ensure table is registered for create_all
 from src.models import (
     AccountDashboardResponse,
     AccountSessionResponse,
@@ -738,7 +739,6 @@ def set_api_pricing(
     account: AccountRecord = Depends(verify_account_session),
     db: Session = Depends(get_db),
 ):
-    from src.db_models import AccountApiPricingModel
     store = DatabaseStore(db)
     client = store.get_api_client_by_id(client_id)
     if not client:
