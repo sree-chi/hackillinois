@@ -3,276 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel Auth Login And Dashboard</title>
+    <title>Sentinel Auth Login</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
-<body>
-    <div class="page-shell">
-        <main class="layout">
-            <nav class="topbar panel">
+<body class="login-body">
+    <div class="login-shell">
+        <canvas id="gravity-canvas" class="gravity-canvas" aria-hidden="true"></canvas>
+
+        <main class="login-layout">
+            <nav class="topbar topbar-login panel">
                 <a class="brand-link" href="/">Sentinel Auth</a>
                 <div class="topbar-links">
-                    <a class="topbar-link topbar-link-active" href="/">Login + Dashboard</a>
+                    <a class="topbar-link topbar-link-active" href="/">Login</a>
+                    <a class="topbar-link" href="/dashboard.html">Dashboard</a>
                     <a class="topbar-link" href="/activity.html">Activity Feed</a>
+                    <a class="topbar-link" href="/agent.html">Agent Demo</a>
                 </div>
             </nav>
 
-            <section id="auth-view" class="auth-shell">
-                <section class="hero panel">
-                    <p class="eyebrow">Account-Based API Access</p>
-                    <h1>Start at the login page, then move straight into the Sentinel dashboard after account creation or sign-in.</h1>
-                    <p class="hero-copy">
-                        Create an account to issue API keys tied to your identity, generate starter policies, and review
-                        agent verification activity from one dashboard.
-                    </p>
-                    <div class="hero-meta">
-                        <div>
-                            <span class="meta-label">Base URL</span>
-                            <code id="api-base-label">Loading...</code>
-                        </div>
-                        <div>
-                            <span class="meta-label">Docs</span>
-                            <a id="docs-link" href="/docs" target="_blank" rel="noreferrer">Open API docs</a>
-                        </div>
-                        <div>
-                            <span class="meta-label">Status</span>
-                            <strong id="api-status">Checking...</strong>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="grid">
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Step 1</p>
-                            <h2>Create an account</h2>
-                        </div>
-                        <form id="register-form" class="stack">
-                            <label>
-                                <span>Full name</span>
-                                <input id="register-full-name" type="text" placeholder="Optional">
-                            </label>
-                            <label>
-                                <span>Email</span>
-                                <input id="register-email" type="email" placeholder="team@example.com" required>
-                            </label>
-                            <label>
-                                <span>Password</span>
-                                <input id="register-password" type="password" placeholder="Minimum 8 characters" required>
-                            </label>
-                            <button id="register-button" class="btn btn-primary" type="submit">Create account</button>
-                        </form>
-                    </section>
-
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Step 2</p>
-                            <h2>Sign in</h2>
-                        </div>
-                        <form id="login-form" class="stack">
-                            <label>
-                                <span>Email</span>
-                                <input id="login-email" type="email" placeholder="team@example.com" required>
-                            </label>
-                            <label>
-                                <span>Password</span>
-                                <input id="login-password" type="password" placeholder="Your password" required>
-                            </label>
-                            <button id="login-button" class="btn btn-secondary" type="submit">Login</button>
-                        </form>
-                        <div class="output-card">
-                            <h3>What happens next</h3>
-                            <p class="muted">
-                                After account creation or login, this page switches into the dashboard automatically so
-                                you can generate an API key and start testing your agent policies immediately.
-                            </p>
-                        </div>
-                    </section>
-                </section>
-            </section>
-
-            <section id="dashboard-view" class="dashboard-shell is-hidden">
-                <section class="hero panel">
-                    <div class="dashboard-hero-header">
-                        <div>
-                            <p class="eyebrow">Dashboard</p>
-                            <h1>Your Sentinel workspace for keys, policies, and verification tests.</h1>
-                            <p id="session-meta" class="hero-copy">Account session active. You can issue and manage API keys from this dashboard.</p>
-                        </div>
-                        <div class="dashboard-hero-actions">
-                            <div class="output-card compact-card">
-                                <h3>Signed in as</h3>
-                                <code id="account-summary">Not signed in.</code>
-                            </div>
-                            <button id="logout-button" class="btn btn-ghost" type="button" disabled>Logout</button>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="grid">
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Account</p>
-                            <h2>Issued API keys</h2>
-                        </div>
-                        <p class="muted">Each key is associated with your account. The plaintext value is only shown when a key is created.</p>
-                        <div id="api-key-list" class="dashboard-list">
-                            <div class="empty-state">No keys issued yet.</div>
-                        </div>
-                    </section>
-
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Step 3</p>
-                            <h2>Generate a key</h2>
-                        </div>
-                        <form id="issue-key-form" class="stack">
-                            <label>
-                                <span>App name</span>
-                                <input id="app-name" type="text" placeholder="Atlas Agent Ops" required>
-                            </label>
-                            <label>
-                                <span>Owner name</span>
-                                <input id="owner-name" type="text" placeholder="Optional">
-                            </label>
-                            <label>
-                                <span>Use case</span>
-                                <textarea id="use-case" rows="4" placeholder="Describe what your AI agents will manage."></textarea>
-                            </label>
-                            <button id="issue-key-button" class="btn btn-primary" type="submit" disabled>Issue API key</button>
-                        </form>
-
-                        <div class="output-card">
-                            <div class="output-header">
-                                <h3>Latest issued key</h3>
-                                <button id="copy-key-button" class="btn btn-ghost" type="button" disabled>Copy</button>
-                            </div>
-                            <code id="issued-key">Sign in to create a key.</code>
-                            <p id="issued-key-meta" class="muted">The plaintext key is only returned once.</p>
-                        </div>
-                    </section>
-                </section>
-
-                <section class="grid">
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Solana</p>
-                            <h2>Linked wallets</h2>
-                        </div>
-                        <p class="muted">Connect Phantom to link a real Solana wallet to this account. The dashboard will load its balance and recent transaction record.</p>
-                        <div class="action-row">
-                            <button id="connect-wallet-button" class="btn btn-secondary" type="button" disabled>Connect Phantom</button>
-                            <button id="refresh-wallet-button" class="btn btn-ghost" type="button" disabled>Refresh wallet</button>
-                        </div>
-                        <div id="wallet-status" class="muted">No wallet linked yet.</div>
-                        <div id="wallet-list" class="dashboard-list">
-                            <div class="empty-state">No wallets linked to this account.</div>
-                        </div>
-                    </section>
-
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Wallet View</p>
-                            <h2>On-chain overview</h2>
-                        </div>
-                        <div class="summary-grid">
-                            <div class="summary-card">
-                                <span class="summary-label">Wallet</span>
-                                <code id="wallet-address-label">No wallet selected.</code>
-                            </div>
-                            <div class="summary-card">
-                                <span class="summary-label">Balance</span>
-                                <strong id="wallet-balance-label">0 SOL</strong>
-                            </div>
-                            <div class="summary-card">
-                                <span class="summary-label">Network</span>
-                                <strong id="wallet-network-label">Not loaded</strong>
-                            </div>
-                            <div class="summary-card">
-                                <span class="summary-label">Last sync</span>
-                                <strong id="wallet-last-sync">Not synced</strong>
-                            </div>
-                        </div>
-                        <div class="output-card">
-                            <div class="output-header">
-                                <h3>Recent transactions</h3>
-                                <button id="unlink-wallet-button" class="btn btn-ghost" type="button" disabled>Unlink selected wallet</button>
-                            </div>
-                            <div id="wallet-transaction-list" class="dashboard-list">
-                                <div class="empty-state">Link a wallet to load recent transactions.</div>
-                            </div>
-                        </div>
-                    </section>
-                </section>
-
-                <section class="grid">
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Step 4</p>
-                            <h2>Quickstart</h2>
-                        </div>
-                        <div class="snippet-group">
-                            <div class="snippet-header">
-                                <h3>cURL</h3>
-                                <button id="copy-curl-button" class="btn btn-ghost" type="button" disabled>Copy</button>
-                            </div>
-                            <pre id="curl-snippet" class="snippet">Sign in and issue a key to generate a ready-to-run cURL example.</pre>
-                        </div>
-                        <div class="snippet-group">
-                            <div class="snippet-header">
-                                <h3>JavaScript</h3>
-                                <button id="copy-js-button" class="btn btn-ghost" type="button" disabled>Copy</button>
-                            </div>
-                            <pre id="js-snippet" class="snippet">Sign in and issue a key to generate a browser/server example.</pre>
-                        </div>
-                    </section>
-
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Step 5</p>
-                            <h2>Test your key</h2>
-                        </div>
-                        <div class="stack">
-                            <label>
-                                <span>Policy name</span>
-                                <input id="custom-policy-name" type="text" value="Public portal starter policy">
-                            </label>
-                            <label>
-                                <span>Max spend USD</span>
-                                <input id="custom-spend-limit" type="number" value="5000" min="1" step="1">
-                            </label>
-                            <label>
-                                <span>Max requests per minute</span>
-                                <input id="custom-rate-limit" type="number" value="60" min="1" step="1">
-                            </label>
-                        </div>
-                        <div class="action-row">
-                            <button id="create-policy-button" class="btn btn-secondary" type="button" disabled>Create starter policy</button>
-                            <button id="run-authorize-button" class="btn btn-primary" type="button" disabled>Run sample authorize</button>
-                        </div>
-                        <div class="output-card">
-                            <h3>Current policy</h3>
-                            <code id="policy-id-label">No policy created yet.</code>
-                            <p class="muted">Open the Activity Feed to inspect receipts, blocked requests, and verification messages.</p>
-                            <div class="action-row">
-                                <a class="btn btn-ghost" href="/activity.html">Open activity feed</a>
-                            </div>
-                        </div>
-                    </section>
-                </section>
-
-                <section class="panel">
-                    <div class="section-heading">
-                        <p class="eyebrow">Live Log</p>
-                        <h2>Portal console</h2>
-                    </div>
-                    <div id="console-output" class="console"></div>
-                </section>
+            <section class="login-hero panel">
+                <p class="eyebrow">Antigravity Entry</p>
+                <h1>Let the interface pull you into the Sentinel dashboard.</h1>
+                <p class="hero-copy">
+                    Move your cursor and the field reacts. Click the login button and the particles collapse into it,
+                    then the account prompt opens so you can sign in or create an account.
+                </p>
+                <div class="login-actions">
+                    <button id="launch-login-button" class="btn btn-primary btn-launch" type="button">Login to Sentinel</button>
+                    <p class="login-hint">The particle field follows your cursor, then rushes into the button on click.</p>
+                </div>
             </section>
         </main>
+
+        <section id="auth-overlay" class="auth-overlay auth-overlay-hidden" aria-hidden="true">
+            <div class="auth-backdrop"></div>
+            <div class="auth-dialog panel">
+                <div class="auth-dialog-header">
+                    <div>
+                        <p class="eyebrow">Account Access</p>
+                        <h2>Login or create your Sentinel account.</h2>
+                    </div>
+                    <button id="close-auth-button" class="btn btn-ghost btn-close" type="button">Close</button>
+                </div>
+
+                <div class="auth-tabs">
+                    <button id="show-login-tab" class="auth-tab auth-tab-active" type="button">Login</button>
+                    <button id="show-register-tab" class="auth-tab" type="button">Create account</button>
+                </div>
+
+                <section id="login-panel" class="auth-panel">
+                    <form id="login-form" class="stack">
+                        <label>
+                            <span>Email</span>
+                            <input id="login-email" type="email" placeholder="team@example.com" required>
+                        </label>
+                        <label>
+                            <span>Password</span>
+                            <input id="login-password" type="password" placeholder="Your password" required>
+                        </label>
+                        <button id="login-button" class="btn btn-primary" type="submit">Login</button>
+                    </form>
+                </section>
+
+                <section id="register-panel" class="auth-panel auth-panel-hidden">
+                    <form id="register-form" class="stack">
+                        <label>
+                            <span>Full name</span>
+                            <input id="register-full-name" type="text" placeholder="Optional">
+                        </label>
+                        <label>
+                            <span>Email</span>
+                            <input id="register-email" type="email" placeholder="team@example.com" required>
+                        </label>
+                        <label>
+                            <span>Password</span>
+                            <input id="register-password" type="password" placeholder="Minimum 8 characters" required>
+                        </label>
+                        <button id="register-button" class="btn btn-secondary" type="submit">Create account</button>
+                    </form>
+                </section>
+
+                <div id="auth-status" class="auth-status muted">Choose login or create account to continue.</div>
+            </div>
+        </section>
     </div>
 
     <script type="module" src="/app.js"></script>

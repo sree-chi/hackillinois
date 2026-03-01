@@ -15,6 +15,7 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 main: resolve(__dirname, 'index.html'),
+                dashboard: resolve(__dirname, 'dashboard.html'),
                 activity: resolve(__dirname, 'activity.html'),
                 agent: resolve(__dirname, 'agent.html'), // Added Agent page
                 openaidocs: resolve(__dirname, 'open-ai-docs/index.html'), // Added OpenAI Docs

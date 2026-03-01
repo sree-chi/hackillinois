@@ -30,6 +30,16 @@ body {
         linear-gradient(180deg, #faf6ef 0%, var(--bg) 58%, var(--bg-accent) 100%);
 }
 
+.login-body {
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(214, 122, 45, 0.12), transparent 24%),
+        radial-gradient(circle at 80% 18%, rgba(15, 108, 91, 0.15), transparent 28%),
+        radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.09), transparent 34%),
+        #0f1216;
+    color: #f7f0e5;
+}
+
 code,
 pre,
 input,
@@ -39,6 +49,30 @@ textarea {
 
 .page-shell {
     padding: 32px 20px 48px;
+}
+
+.login-shell {
+    min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+}
+
+.gravity-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+.login-layout {
+    position: relative;
+    z-index: 1;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 32px 20px 48px;
+    display: grid;
+    gap: 24px;
 }
 
 .layout {
@@ -96,6 +130,27 @@ textarea {
     gap: 24px;
 }
 
+.topbar-login {
+    background: rgba(20, 24, 29, 0.62);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #f5ede1;
+}
+
+.topbar-login .brand-link,
+.topbar-login .topbar-link {
+    color: #f5ede1;
+}
+
+.topbar-login .topbar-link {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.topbar-login .topbar-link-active {
+    background: rgba(214, 122, 45, 0.18);
+    border-color: rgba(214, 122, 45, 0.3);
+}
+
 .auth-shell,
 .dashboard-shell {
     display: grid;
@@ -133,6 +188,111 @@ textarea {
     border-radius: 50%;
     background: rgba(15, 108, 91, 0.08);
     filter: blur(2px);
+}
+
+.login-hero {
+    min-height: calc(100vh - 180px);
+    display: grid;
+    align-content: center;
+    justify-items: start;
+    background:
+        linear-gradient(135deg, rgba(14, 17, 21, 0.72), rgba(19, 25, 31, 0.58)),
+        rgba(17, 21, 26, 0.44);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #f7f0e5;
+}
+
+.login-hero .eyebrow,
+.login-hero .hero-copy,
+.login-hero .login-hint {
+    color: rgba(247, 240, 229, 0.78);
+}
+
+.login-actions {
+    margin-top: 28px;
+    display: grid;
+    gap: 12px;
+}
+
+.btn-launch {
+    padding: 18px 32px;
+    font-size: 1.02rem;
+    box-shadow: 0 18px 48px rgba(214, 122, 45, 0.24);
+}
+
+.login-hint {
+    max-width: 38ch;
+    line-height: 1.6;
+}
+
+.auth-overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 5;
+}
+
+.auth-overlay-hidden {
+    display: none;
+}
+
+.auth-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(7, 9, 12, 0.72);
+    backdrop-filter: blur(8px);
+}
+
+.auth-dialog {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 560px);
+    background: rgba(255, 250, 241, 0.94);
+}
+
+.auth-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.btn-close {
+    min-width: 90px;
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.auth-tab {
+    border: 1px solid rgba(58, 44, 24, 0.14);
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 11px 16px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.auth-tab-active {
+    background: rgba(15, 108, 91, 0.12);
+    color: var(--primary-dark);
+    border-color: rgba(15, 108, 91, 0.18);
+}
+
+.auth-panel-hidden {
+    display: none;
+}
+
+.auth-status {
+    margin-top: 16px;
+    min-height: 26px;
 }
 
 .dashboard-hero-header {
