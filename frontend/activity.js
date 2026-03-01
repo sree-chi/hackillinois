@@ -114,9 +114,9 @@ function timeAgo(iso) {
 // ── Wallet name resolution ─────────────────────────────────────────────────
 function walletDisplayName(walletAddr) {
     if (!walletAddr) return null;
-    // Check agents first
-    const agent = STATE.agents.find(a => a.wallet_address === walletAddr);
-    if (agent) return agent.name;
+    // Check api keys first
+    const key = STATE.apiKeys.find(k => k.wallet_address === walletAddr && !k.revoked_at && !k.suspended_at);
+    if (key && key.wallet_label) return key.wallet_label;
     // Shorten address
     return walletAddr.substring(0, 6) + "…" + walletAddr.substring(walletAddr.length - 4);
 }
@@ -286,78 +286,42 @@ function renderWalletBreakdown() {
 }
 
 // ── Agents ─────────────────────────────────────────────────────────────────
-async function loadAgents() {
-    if (!STATE.sessionToken) return;
-    try {
-        STATE.agents = await apiFetch("/v1/agents", {
-            headers: { Authorization: `Bearer ${STATE.sessionToken}` },
-        });
-    } catch { STATE.agents = []; }
-    renderAgents();
-}
-
-function agentIsActive(agent) {
+function agentIsActive(walletAddr) {
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-    return STATE.allAudits.some(a => {
-        const m1 = agent.wallet_address && a.agent_wallet === agent.wallet_address;
-        const m2 = a.requester?.toLowerCase().includes(agent.name.toLowerCase().replace(/\s+/g, "_"));
-        return (m1 || m2) && new Date(a.created_at).getTime() > fiveMinAgo;
-    });
+    return STATE.allAudits.some(a =>
+        a.agent_wallet === walletAddr && new Date(a.created_at).getTime() > fiveMinAgo
+    );
 }
 
 function renderAgents() {
-    agentCount.textContent = `${STATE.agents.length} registered`;
-    if (!STATE.agents.length) {
-        agentList.innerHTML = `<div class="empty-state">No agents registered yet. Add one above.</div>`;
+    // Get unique wallets from active API keys
+    const agentsMap = new Map();
+    for (const k of STATE.apiKeys) {
+        if (!k.revoked_at && !k.suspended_at && k.wallet_address) {
+            if (!agentsMap.has(k.wallet_address)) {
+                agentsMap.set(k.wallet_address, k.wallet_label || "Unnamed Agent");
+            }
+        }
+    }
+    const agents = Array.from(agentsMap.entries());
+
+    agentCount.textContent = `${agents.length} linked`;
+    if (!agents.length) {
+        agentList.innerHTML = `<div class="empty-state">No wallets linked to your active keys.</div>`;
         return;
     }
-    agentList.innerHTML = STATE.agents.map(a => {
-        const active = agentIsActive(a);
+    agentList.innerHTML = agents.map(([wallet, label]) => {
+        const active = agentIsActive(wallet);
         return `
         <div class="agent-row">
             <div class="agent-status-dot ${active ? "dot-active" : "dot-idle"}"></div>
             <div class="agent-info">
-                <div class="agent-name">${esc(a.name)}</div>
-                <div class="agent-wallet-addr">${a.wallet_address ? esc(a.wallet_address) : "No wallet linked"}</div>
+                <div class="agent-name">${esc(label)}</div>
+                <div class="agent-wallet-addr" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem">${esc(wallet)}</div>
             </div>
-            <button class="btn-remove" data-delete-agent="${esc(a.agent_id)}">Remove</button>
         </div>`;
     }).join("");
 }
-
-addAgentBtn.addEventListener("click", async () => {
-    const name = newAgentName.value.trim();
-    const wallet = newAgentWallet.value.trim() || null;
-    if (!name) { toast("Agent name is required.", "error"); return; }
-    if (!wallet) { toast("Wallet address is required to track spending.", "error"); return; }
-    if (!STATE.sessionToken) { toast("Sign in to register agents.", "error"); return; }
-    addAgentBtn.disabled = true;
-    try {
-        await apiFetch("/v1/agents", {
-            method: "POST",
-            headers: sessionHeaders(),
-            body: JSON.stringify({ name, wallet_address: wallet }),
-        });
-        newAgentName.value = "";
-        newAgentWallet.value = "";
-        await loadAgents();
-        renderWalletBreakdown(); // Re-render with new names
-        renderAuditFeed();       // Re-render wallet tags
-        toast(`Agent "${name}" registered.`, "success");
-    } catch (err) { toast(`Failed: ${err.message}`, "error"); }
-    finally { addAgentBtn.disabled = false; }
-});
-
-agentList.addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-delete-agent]");
-    if (!btn) return;
-    btn.disabled = true;
-    try {
-        await apiFetch(`/v1/agents/${btn.dataset.deleteAgent}`, { method: "DELETE", headers: sessionHeaders() });
-        await loadAgents();
-        toast("Agent removed.", "info");
-    } catch (err) { btn.disabled = false; toast(`Failed: ${err.message}`, "error"); }
-});
 
 // ── Audit Feed ─────────────────────────────────────────────────────────────
 async function loadAudits() {
@@ -483,7 +447,7 @@ async function loadDashboard() {
     loadBtn.textContent = "Loading…";
     try {
         await Promise.all([loadStats(), loadAudits()]);
-        await loadAgents();
+        renderAgents();
         renderWalletBreakdown();
         toast("Dashboard loaded.", "success");
     } catch (err) {
