@@ -1,10 +1,30 @@
 from __future__ import annotations
 
 import base64
+"""Authentication helpers and dependencies for Sentinel Auth API.
+
+This file provides:
+- API key extraction and verification (admin key + per-client API keys stored in DB)
+- Session token handling and verification
+- Password hashing and verification utilities
+- A simple in-process rate limiter for authentication endpoints
+
+The user requested the file be replaced with this improved version which adds
+stricter startup checks (refuse to run in production with a default key),
+email validation helpers, and an auth attempt rate limiter.
+"""
+
+from __future__ import annotations
+
+import base64
 import hashlib
 import hmac
 import os
+import re
 import secrets
+import threading
+from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone as _tz
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
@@ -17,7 +37,19 @@ api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 x_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 x_session_token_header = APIKeyHeader(name="X-Session-Token", auto_error=False)
 
-ADMIN_API_KEY = os.getenv("API_KEY", "default-dev-key")
+_DEFAULT_DEV_KEY = "default-dev-key"
+_ENV_NAME = os.getenv("APP_ENV", "production").lower()
+ADMIN_API_KEY = os.getenv("API_KEY", _DEFAULT_DEV_KEY)
+
+# Refuse to start in production with the default insecure key
+if ADMIN_API_KEY == _DEFAULT_DEV_KEY and _ENV_NAME not in ("development", "dev", "test", "testing"):
+    raise RuntimeError(
+        "FATAL: API_KEY environment variable is not set (or uses the insecure default). "
+        "Set a strong API_KEY before starting in a non-development environment."
+    )
+
+# Basic RFC-5322-inspired email regex — rejects obviously malformed addresses
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def hash_api_key(api_key: str) -> str:
@@ -34,6 +66,42 @@ def api_key_prefix(api_key: str) -> str:
 
 def normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+def validate_email(email: str) -> bool:
+    """Return True if email looks structurally valid."""
+    return bool(_EMAIL_RE.match(email))
+
+
+# ── In-process rate limiter for auth endpoints ────────────────────────────────
+_auth_rate_lock = threading.Lock()
+# Maps IP -> deque of attempt timestamps
+_auth_rate_store: dict[str, deque] = defaultdict(deque)
+_AUTH_RATE_WINDOW_SECONDS = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "60"))
+_AUTH_RATE_MAX_ATTEMPTS = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "10"))
+
+
+def check_auth_rate_limit(ip: str) -> None:
+    """Raise HTTP 429 if the IP has exceeded the auth attempt rate limit."""
+    now = datetime.now(_tz.utc)
+    cutoff = now - timedelta(seconds=_AUTH_RATE_WINDOW_SECONDS)
+    with _auth_rate_lock:
+        dq = _auth_rate_store[ip]
+        # Evict old entries
+        while dq and dq[0] < cutoff:
+            dq.popleft()
+        if len(dq) >= _AUTH_RATE_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many authentication attempts. Please try again later.",
+                headers={"Retry-After": str(_AUTH_RATE_WINDOW_SECONDS)},
+            )
+        dq.append(now)
+
+
+def validate_email(email: str) -> bool:
+    """Return True if email looks structurally valid."""
+    return bool(_EMAIL_RE.match(email))
 
 
 def generate_session_token() -> str:

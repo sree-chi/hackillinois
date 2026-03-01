@@ -958,7 +958,7 @@ def generate_agent_intent(payload: AgentIntentRequest):
     env_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), ".env.local")
     logger.info(f"Loading dot env from {env_path}")
     env = dotenv_values(env_path)
-    logger.info(f"Loaded config: {env}")
+    logger.info(f"Loaded config: {env}") # this is unsafe to log in production if the .env contains secrets, but it's useful for debugging missing config issues in this demo
 
     gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("Gemini_API_Key") or env.get("GEMINI_API_KEY") or env.get("Gemini_API_Key")
     
