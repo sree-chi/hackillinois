@@ -6,25 +6,27 @@ import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from src.auth import (
+    api_key_header,
     api_key_prefix,
+    check_auth_rate_limit,
+    extract_session_token,
     generate_api_key,
-    generate_phone_verification_code,
     generate_session_token,
     hash_api_key,
-    hash_phone_verification_code,
     hash_password,
     hash_session_token,
     normalize_email,
-    normalize_phone_number,
+    validate_email,
     verify_account_session,
     verify_admin_key,
     verify_api_key,
     verify_password,
+    x_session_token_header,
 )
 from src.database import Base, engine, get_db
 from src.models import (
@@ -33,8 +35,8 @@ from src.models import (
     AgentIntentRequest,
     AgentRecord,
     AuditRecord,
-    AuditStatus,
     AuditStatsResponse,
+    AuditStatus,
     AccountRecord,
     AuthorizationProof,
     AuthorizationDecision,
@@ -42,7 +44,6 @@ from src.models import (
     CreateAgentRequest,
     LinkedWalletRecord,
     LoginAccountRequest,
-    PhoneCodeChallengeResponse,
     PublicApiOverview,
     CreatePolicyRequest,
     ErrorEnvelope,
@@ -50,9 +51,7 @@ from src.models import (
     IssueApiKeyResponse,
     RegisterAccountRequest,
     ReceiptStatus,
-    RequestPhoneCodeRequest,
     SafetyViolation,
-    VerifyPhoneCodeRequest,
     VerifyProofRequest,
     VerifyProofResult,
     UpdatePolicyRequest,
@@ -64,7 +63,6 @@ from src.models import (
     new_id,
 )
 from src.solana import SolanaVerificationError, receipt_service
-from src.sms import SmsDeliveryError, SmsSender
 from src.store import DatabaseStore
 
 logging.basicConfig(
@@ -76,7 +74,6 @@ logger = logging.getLogger("SentinelAuth")
 HIGH_RISK_AMOUNT_USD = float(os.getenv("HIGH_RISK_AMOUNT_USD", "1000"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 ACCOUNT_SESSION_TTL_SECONDS = int(os.getenv("ACCOUNT_SESSION_TTL_SECONDS", "86400"))
-PHONE_VERIFICATION_TTL_SECONDS = int(os.getenv("PHONE_VERIFICATION_TTL_SECONDS", "600"))
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
@@ -85,94 +82,47 @@ ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
-sms_sender = SmsSender()
 
 
 def ensure_runtime_schema_compatibility() -> None:
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    if "policies" not in table_names:
-        return
-
-    policy_columns = {column["name"] for column in inspector.get_columns("policies")}
-    dialect = engine.dialect.name
 
     statements: list[str] = []
-    if "version" not in policy_columns:
-        if dialect == "postgresql":
-            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1")
-        else:
-            statements.append("ALTER TABLE policies ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-    if "root_policy_id" not in policy_columns:
-        if dialect == "postgresql":
-            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS root_policy_id VARCHAR")
-        else:
-            statements.append("ALTER TABLE policies ADD COLUMN root_policy_id VARCHAR")
-    if "idempotency_key" not in policy_columns:
-        if dialect == "postgresql":
-            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR")
-            statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_policies_idempotency_key ON policies (idempotency_key)")
-        else:
-            statements.append("ALTER TABLE policies ADD COLUMN idempotency_key VARCHAR")
-    if "policy_schema_version" not in policy_columns:
-        if dialect == "postgresql":
-            statements.append(
-                "ALTER TABLE policies ADD COLUMN IF NOT EXISTS policy_schema_version VARCHAR(50) NOT NULL DEFAULT 'sentinel-policy/v1'"
-            )
-        else:
-            statements.append(
-                "ALTER TABLE policies ADD COLUMN policy_schema_version VARCHAR(50) NOT NULL DEFAULT 'sentinel-policy/v1'"
-            )
-    if "risk_categories" not in policy_columns:
-        if dialect == "postgresql":
-            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS risk_categories JSONB NOT NULL DEFAULT '[]'::jsonb")
-        else:
-            statements.append("ALTER TABLE policies ADD COLUMN risk_categories JSON NOT NULL DEFAULT '[]'")
-    if "budget_config" not in policy_columns:
-        if dialect == "postgresql":
-            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS budget_config JSONB NOT NULL DEFAULT '{}'::jsonb")
-        else:
-            statements.append("ALTER TABLE policies ADD COLUMN budget_config JSON NOT NULL DEFAULT '{}'")
-    if "required_approvers" not in policy_columns:
-        if dialect == "postgresql":
-            statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS required_approvers JSONB NOT NULL DEFAULT '[]'::jsonb")
-        else:
-            statements.append("ALTER TABLE policies ADD COLUMN required_approvers JSON NOT NULL DEFAULT '[]'")
+    dialect = engine.dialect.name
 
-    if not statements:
-        pass
-
-    if "audit_records" in table_names:
-        audit_columns = {column["name"] for column in inspector.get_columns("audit_records")}
-        if "reasoning_trace" not in audit_columns:
+    if "policies" in table_names:
+        policy_columns = {column["name"] for column in inspector.get_columns("policies")}
+        if "version" not in policy_columns:
             if dialect == "postgresql":
-                statements.append("ALTER TABLE audit_records ADD COLUMN IF NOT EXISTS reasoning_trace TEXT")
+                statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1")
             else:
-                statements.append("ALTER TABLE audit_records ADD COLUMN reasoning_trace TEXT")
+                statements.append("ALTER TABLE policies ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        if "root_policy_id" not in policy_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS root_policy_id VARCHAR")
+            else:
+                statements.append("ALTER TABLE policies ADD COLUMN root_policy_id VARCHAR")
+        if "idempotency_key" not in policy_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR")
+                statements.append(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_policies_idempotency_key ON policies (idempotency_key)"
+                )
+            else:
+                statements.append("ALTER TABLE policies ADD COLUMN idempotency_key VARCHAR")
 
+    # NOTE: this block was previously unreachable when no policy statements were queued.
+    # It is now independent so api_clients patches always run when needed.
     if "api_clients" in table_names:
         api_client_columns = {column["name"] for column in inspector.get_columns("api_clients")}
         if "suspended_at" not in api_client_columns:
             if dialect == "postgresql":
-                statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP WITH TIME ZONE")
+                statements.append(
+                    "ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP WITH TIME ZONE"
+                )
             else:
                 statements.append("ALTER TABLE api_clients ADD COLUMN suspended_at DATETIME")
-
-    if "accounts" in table_names:
-        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
-        if "phone_number" not in account_columns:
-            if dialect == "postgresql":
-                statements.append("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20)")
-            else:
-                statements.append("ALTER TABLE accounts ADD COLUMN phone_number VARCHAR(20)")
-
-    if "account_phone_verifications" in table_names:
-        verification_columns = {column["name"] for column in inspector.get_columns("account_phone_verifications")}
-        if "account_id" not in verification_columns:
-            if dialect == "postgresql":
-                statements.append("ALTER TABLE account_phone_verifications ADD COLUMN IF NOT EXISTS account_id VARCHAR")
-            else:
-                statements.append("ALTER TABLE account_phone_verifications ADD COLUMN account_id VARCHAR")
 
     if not statements:
         return
@@ -243,6 +193,7 @@ def error_response(
     request_id: str | None = None,
     policy_id: str | None = None,
     details: dict | None = None,
+    extra_headers: dict | None = None,
 ) -> HTTPException:
     return HTTPException(
         status_code=status_code,
@@ -256,7 +207,8 @@ def error_response(
                 "status": status_code,
                 "details": details or {},
             }
-        ).model_dump()
+        ).model_dump(),
+        headers=extra_headers or {},
     )
 
 
@@ -299,8 +251,17 @@ def build_session_response(account: AccountRecord, request: Request, store: Data
 
 @app.post("/v1/accounts/register", response_model=AccountSessionResponse, status_code=status.HTTP_201_CREATED)
 def register_account(payload: RegisterAccountRequest, request: Request, db: Session = Depends(get_db)):
-    store = DatabaseStore(db)
+    client_ip = request.client.host if request.client else "unknown"
+    check_auth_rate_limit(client_ip)
+
     email = normalize_email(payload.email)
+    if not validate_email(email):
+        raise error_response(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="INVALID_EMAIL",
+            message="The provided email address is not valid.",
+        )
+    store = DatabaseStore(db)
     if store.get_account_by_email(email):
         raise error_response(
             status_code=status.HTTP_409_CONFLICT,
@@ -313,6 +274,9 @@ def register_account(payload: RegisterAccountRequest, request: Request, db: Sess
 
 @app.post("/v1/accounts/login", response_model=AccountSessionResponse)
 def login_account(payload: LoginAccountRequest, request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    check_auth_rate_limit(client_ip)
+
     store = DatabaseStore(db)
     email = normalize_email(payload.email)
     account_row = store.get_account_by_email(email)
@@ -324,107 +288,6 @@ def login_account(payload: LoginAccountRequest, request: Request, db: Session = 
         )
     account = AccountRecord.model_validate(account_row)
     return build_session_response(account, request, store)
-
-
-@app.post("/v1/accounts/me/phone-2fa/request-code", response_model=PhoneCodeChallengeResponse, status_code=status.HTTP_201_CREATED)
-def request_phone_code(
-    payload: RequestPhoneCodeRequest,
-    account: AccountRecord = Depends(verify_account_session),
-    db: Session = Depends(get_db),
-):
-    store = DatabaseStore(db)
-    try:
-        phone_number = normalize_phone_number(payload.phone_number)
-    except ValueError as exc:
-        raise error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="INVALID_PHONE_NUMBER",
-            message=str(exc),
-        ) from exc
-
-    existing_account = store.get_account_by_phone(phone_number)
-    if existing_account and existing_account.account_id != account.account_id:
-        raise error_response(
-            status_code=status.HTTP_409_CONFLICT,
-            code="PHONE_ALREADY_IN_USE",
-            message="This phone number is already verified on another account.",
-        )
-
-    code = generate_phone_verification_code()
-    try:
-        delivery = sms_sender.send_verification_code(phone_number, code)
-    except SmsDeliveryError as exc:
-        raise error_response(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            code="SMS_DELIVERY_FAILED",
-            message=str(exc),
-        ) from exc
-
-    verification = store.create_phone_verification(
-        account_id=account.account_id,
-        phone_number=phone_number,
-        code_hash=hash_phone_verification_code(phone_number, code),
-        full_name=account.full_name,
-        delivery_channel=str(delivery["delivery_channel"]),
-        expires_at=expires_at(PHONE_VERIFICATION_TTL_SECONDS),
-    )
-    return PhoneCodeChallengeResponse(
-        phone_number=phone_number,
-        expires_at=verification.expires_at,
-        delivery_channel=str(delivery["delivery_channel"]),
-        dev_code=delivery["dev_code"],
-    )
-
-
-@app.post("/v1/accounts/me/phone-2fa/verify-code", response_model=AccountRecord)
-def verify_phone_code(
-    payload: VerifyPhoneCodeRequest,
-    account: AccountRecord = Depends(verify_account_session),
-    db: Session = Depends(get_db),
-):
-    store = DatabaseStore(db)
-    try:
-        phone_number = normalize_phone_number(payload.phone_number)
-    except ValueError as exc:
-        raise error_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="INVALID_PHONE_NUMBER",
-            message=str(exc),
-        ) from exc
-
-    verification = store.get_latest_phone_verification(phone_number, account.account_id)
-    if not verification or verification.consumed_at is not None:
-        raise error_response(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code="INVALID_CODE",
-            message="No active verification code was found for this phone number.",
-        )
-
-    verification_expires_at = verification.expires_at
-    if verification_expires_at.tzinfo is None:
-        verification_expires_at = verification_expires_at.replace(tzinfo=timezone.utc)
-    if verification_expires_at <= datetime.now(timezone.utc):
-        raise error_response(
-            status_code=status.HTTP_410_GONE,
-            code="CODE_EXPIRED",
-            message="The verification code has expired.",
-        )
-    if verification.code_hash != hash_phone_verification_code(phone_number, payload.code.strip()):
-        raise error_response(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code="INVALID_CODE",
-            message="The verification code is invalid.",
-        )
-
-    store.consume_phone_verification(verification.verification_id)
-    updated_account = store.update_account_phone_number(account.account_id, phone_number)
-    if not updated_account:
-        raise error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="ACCOUNT_NOT_FOUND",
-            message="Account was not found.",
-        )
-    return updated_account
 
 
 @app.get("/v1/accounts/me", response_model=AccountRecord)
