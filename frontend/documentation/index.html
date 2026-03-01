@@ -8,8 +8,10 @@
     <link rel="stylesheet" href="/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap"
+        rel="stylesheet">
+
     <style>
         /* Documentation Specific Styles */
         .docs-layout {
@@ -42,7 +44,8 @@
             transition: all 0.2s ease;
         }
 
-        .docs-sidebar-link:hover, .docs-sidebar-link.active {
+        .docs-sidebar-link:hover,
+        .docs-sidebar-link.active {
             background: rgba(182, 132, 82, 0.12);
             color: var(--text);
             font-weight: 500;
@@ -96,10 +99,26 @@
             letter-spacing: 0.05em;
         }
 
-        .method-get { background: rgba(59, 130, 246, 0.15); color: #2563eb; }
-        .method-post { background: rgba(16, 185, 129, 0.15); color: #059669; }
-        .method-put, .method-patch { background: rgba(245, 158, 11, 0.15); color: #d97706; }
-        .method-delete { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+        .method-get {
+            background: rgba(59, 130, 246, 0.15);
+            color: #2563eb;
+        }
+
+        .method-post {
+            background: rgba(16, 185, 129, 0.15);
+            color: #059669;
+        }
+
+        .method-put,
+        .method-patch {
+            background: rgba(245, 158, 11, 0.15);
+            color: #d97706;
+        }
+
+        .method-delete {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
 
         .endpoint-url {
             font-family: "IBM Plex Mono", monospace;
@@ -121,7 +140,8 @@
             border: 1px solid var(--line);
         }
 
-        .docs-table th, .docs-table td {
+        .docs-table th,
+        .docs-table td {
             text-align: left;
             padding: 12px 16px;
             border-bottom: 1px solid var(--line);
@@ -142,14 +162,24 @@
         }
 
         .docs-table code {
-            background: rgba(0,0,0,0.05);
+            background: rgba(0, 0, 0, 0.05);
             padding: 2px 6px;
             border-radius: 4px;
             color: var(--primary-dark);
         }
 
-        .req-yes { color: #dc2626; font-weight: 500; font-size: 0.85rem; text-transform: uppercase;}
-        .req-no { color: var(--muted); font-size: 0.85rem; text-transform: uppercase;}
+        .req-yes {
+            color: #dc2626;
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .req-no {
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
 
         .code-block-wrapper {
             margin-top: 16px;
@@ -166,9 +196,14 @@
             font-size: 0.85rem;
             font-family: "IBM Plex Mono", monospace;
         }
-        
-        .code-block-header.success { color: #10b981; }
-        .code-block-header.error { color: #ef4444; }
+
+        .code-block-header.success {
+            color: #10b981;
+        }
+
+        .code-block-header.error {
+            color: #ef4444;
+        }
 
         .docs-snippet {
             margin-top: 0;
@@ -181,6 +216,7 @@
             .docs-layout {
                 grid-template-columns: 1fr;
             }
+
             .docs-sidebar {
                 position: relative;
                 height: auto;
@@ -194,21 +230,13 @@
 
 <body>
     <div class="page-shell">
-        <nav class="topbar panel" style="margin-bottom: 32px; max-width: 1400px; margin-left: auto; margin-right: auto;">
-            <a class="brand-link" href="/">
-                <!-- <svg width="24" height="24" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 8px;">
-                    <rect width="120" height="120" rx="28" fill="#1d1813" />
-                    <rect width="104" height="104" x="8" y="8" rx="20" fill="none" stroke="#6a5d4b" stroke-width="2" opacity="0.3" />
-                    <path d="M 82 42 C 82 24, 38 24, 38 42 C 38 56, 82 64, 82 78 C 82 96, 38 96, 38 78" fill="none" stroke="#c99863" stroke-width="16" stroke-linecap="round" />
-                    <circle cx="82" cy="42" r="4" fill="#e8dfd2" />
-                    <circle cx="38" cy="78" r="4" fill="#e8dfd2" />
-                </svg> -->
-                Sentinel Auth
-            </a>
+        <nav class="topbar panel">
+            <a class="brand-link" href="/">Sentinel Auth</a>
             <div class="topbar-links">
-                <a class="topbar-link" href="/">Developer Portal</a>
-                <a class="topbar-link" href="/activity.html">Activity Feed</a>
-                <a class="topbar-link topbar-link-active" href="/documentation/index.html">API Docs</a>
+                <a class="topbar-link" href="/activity.html">Dashboard</a>
+                <a class="topbar-link" href="/dashboard.html">Keys</a>
+                <a class="topbar-link topbar-link-active" href="/documentation/index.html">Documentation</a>
+                <a class="topbar-link" href="/agent.html">Agent Demo</a>
             </div>
         </nav>
 
@@ -242,10 +270,16 @@
                     <h2>What is Sentinel Auth?</h2>
                     <p class="hero-copy" style="margin-top: 0;"><strong>Authorize · Audit · Secure · Anchor</strong></p>
                     <p class="muted">
-                        Sentinel Auth is a REST API and policy engine that sits between your autonomous AI agents and real-world APIs. You define strict security policies (e.g., maximum spend limits, allowed HTTP methods, and rate limits), and your AI agents must request permission via Sentinel before acting.
+                        Sentinel Auth is a REST API and policy engine that sits between your autonomous AI agents and
+                        real-world APIs. You define strict security policies (e.g., maximum spend limits, allowed HTTP
+                        methods, and rate limits), and your AI agents must request permission via Sentinel before
+                        acting.
                     </p>
                     <p class="muted">
-                        Sentinel detects policy violations, strictly limits financial exposure, and provides a Solana-backed Web3 audit trail by anchoring every allowed/blocked action to the blockchain. High-risk actions automatically trigger a <code>402 Payment Required</code> challenge, requiring a cryptographic signature (x402 token) from an authorized wallet before proceeding.
+                        Sentinel detects policy violations, strictly limits financial exposure, and provides a
+                        Solana-backed Web3 audit trail by anchoring every allowed/blocked action to the blockchain.
+                        High-risk actions automatically trigger a <code>402 Payment Required</code> challenge, requiring
+                        a cryptographic signature (x402 token) from an authorized wallet before proceeding.
                     </p>
                 </section>
 
@@ -267,9 +301,12 @@
                     </div>
                     <div class="output-card compact-card">
                         <span class="meta-label">Headers Required</span>
-                        <p class="muted" style="margin-top: 4px; margin-bottom: 8px;"><code>Content-Type: application/json</code></p>
-                        <p class="muted" style="margin-top: 4px; margin-bottom: 8px;"><strong>Agent Endpoints:</strong> <code>Authorization: Bearer &lt;API_KEY&gt;</code></p>
-                        <p class="muted" style="margin-top: 4px;"><strong>Dashboard Endpoints:</strong> <code>X-Session-Token: &lt;SESSION_TOKEN&gt;</code></p>
+                        <p class="muted" style="margin-top: 4px; margin-bottom: 8px;">
+                            <code>Content-Type: application/json</code></p>
+                        <p class="muted" style="margin-top: 4px; margin-bottom: 8px;"><strong>Agent Endpoints:</strong>
+                            <code>Authorization: Bearer &lt;API_KEY&gt;</code></p>
+                        <p class="muted" style="margin-top: 4px;"><strong>Dashboard Endpoints:</strong>
+                            <code>X-Session-Token: &lt;SESSION_TOKEN&gt;</code></p>
                     </div>
                 </section>
 
@@ -297,7 +334,8 @@
                         <span class="method-badge method-get">GET</span>
                         <span class="endpoint-url">/v1/public/overview</span>
                     </h3>
-                    <p class="muted">Returns a public overview of the API status, key endpoints, quickstart guide, and a sample policy rule configuration.</p>
+                    <p class="muted">Returns a public overview of the API status, key endpoints, quickstart guide, and a
+                        sample policy rule configuration.</p>
                     <div class="code-block-wrapper">
                         <div class="code-block-header success">Response: 200 OK</div>
                         <pre class="snippet docs-snippet">
@@ -394,7 +432,8 @@
                         <span class="method-badge method-post">POST</span>
                         <span class="endpoint-url">/v1/developer/keys</span>
                     </h3>
-                    <p class="muted">Issue a new API key for an AI agent. <strong>Requires X-Session-Token header.</strong></p>
+                    <p class="muted">Issue a new API key for an AI agent. <strong>Requires X-Session-Token
+                            header.</strong></p>
                     <table class="docs-table">
                         <thead>
                             <tr>
@@ -444,7 +483,8 @@
                         <span class="method-badge method-delete">DELETE</span>
                         <span class="endpoint-url">/v1/accounts/me/keys/:clientId</span>
                     </h3>
-                    <p class="muted">Revoke an API key permanently. Any active policies/agents using this key will immediately receive 401 Unauthorized errors.</p>
+                    <p class="muted">Revoke an API key permanently. Any active policies/agents using this key will
+                        immediately receive 401 Unauthorized errors.</p>
                 </section>
 
                 <hr style="border: none; border-top: 1px solid var(--line); margin: 0;">
@@ -530,13 +570,14 @@
                 <section id="authorize" class="docs-section">
                     <p class="eyebrow">Core API</p>
                     <h2>Authorization Engine</h2>
-                    <p class="muted">The core engine. Submits an agent's intended action for evaluation against a specific policy.</p>
-                    
+                    <p class="muted">The core engine. Submits an agent's intended action for evaluation against a
+                        specific policy.</p>
+
                     <h3>
                         <span class="method-badge method-post">POST</span>
                         <span class="endpoint-url">/v1/authorize</span>
                     </h3>
-                    
+
                     <h4>Request Body</h4>
                     <table class="docs-table">
                         <thead>
@@ -637,7 +678,9 @@
 {
   "detail": "High-risk actions require a verified payment token via x-solana-tx-signature."
 }</pre>
-                    <p class="muted" style="font-size: 0.85rem; padding: 10px;">Triggered automatically if <code>amount_usd</code> is &gt; $1,000. Agent must resubmit the exact same payload but include a signed micro-transaction in the <code>x-solana-tx-signature</code> header.</p>
+                        <p class="muted" style="font-size: 0.85rem; padding: 10px;">Triggered automatically if
+                            <code>amount_usd</code> is &gt; $1,000. Agent must resubmit the exact same payload but
+                            include a signed micro-transaction in the <code>x-solana-tx-signature</code> header.</p>
                     </div>
 
                 </section>
@@ -653,7 +696,8 @@
                         <span class="method-badge method-get">GET</span>
                         <span class="endpoint-url">/v1/audits/:policy_id</span>
                     </h3>
-                    <p class="muted">List all historical audit records (both allowed and blocked actions) for a specific policy.</p>
+                    <p class="muted">List all historical audit records (both allowed and blocked actions) for a specific
+                        policy.</p>
                     <div class="code-block-wrapper">
                         <div class="code-block-header success">Response: 200 OK</div>
                         <pre class="snippet docs-snippet">
@@ -697,7 +741,8 @@
                 <section id="agent-intent" class="docs-section">
                     <p class="eyebrow">Core API</p>
                     <h2>Agent Intent</h2>
-                    <p class="muted">A utility endpoint that takes a raw, human-language command and uses Google Gemini to translate it into a strict Sentinel JSON format.</p>
+                    <p class="muted">A utility endpoint that takes a raw, human-language command and uses Google Gemini
+                        to translate it into a strict Sentinel JSON format.</p>
 
                     <h3>
                         <span class="method-badge method-post">POST</span>
@@ -734,11 +779,13 @@
                 <section id="schema" class="docs-section">
                     <p class="eyebrow">Reference</p>
                     <h2>Request Format</h2>
-                    <p class="muted">Every agent request must explicitly state what it intends to do <em>before</em> it does it.</p>
-                    
+                    <p class="muted">Every agent request must explicitly state what it intends to do <em>before</em> it
+                        does it.</p>
+
                     <div class="output-card">
                         <h3>Action Schema</h3>
-                        <p class="muted" style="margin-top: 8px; margin-bottom: 12px;">Submitted within the body of a POST request to <code>/v1/authorize</code>.</p>
+                        <p class="muted" style="margin-top: 8px; margin-bottom: 12px;">Submitted within the body of a
+                            POST request to <code>/v1/authorize</code>.</p>
                         <table class="docs-table" style="margin-top: 0;">
                             <tbody>
                                 <tr>
@@ -786,11 +833,17 @@
                 <section id="limits" class="docs-section">
                     <p class="eyebrow">Reference</p>
                     <h2>Limits & Errors</h2>
-                    
+
                     <div class="output-card">
-                        <p class="muted" style="margin-top: 0;"><strong>Per-Policy Budgets:</strong> Enforced by comparing the sum of all previously approved <code>amount_usd</code> for a policy against <code>max_spend_usd</code>. Returns <code>403 Forbidden</code> if exceeded.</p>
-                        <p class="muted" style="margin-top: 12px;"><strong>Per-Policy Rate Limits:</strong> Controlled by <code>max_requests_per_minute</code>. Returns <code>429 Too Many Requests</code> if exceeded.</p>
-                        <p class="muted" style="margin-top: 12px;"><strong>High-Risk Auth (x402):</strong> Actions requesting <code>amount_usd</code> >= <code>$1,000</code> automatically fail with <code>402 Payment Required</code> unless a valid Solana signature is attached.</p>
+                        <p class="muted" style="margin-top: 0;"><strong>Per-Policy Budgets:</strong> Enforced by
+                            comparing the sum of all previously approved <code>amount_usd</code> for a policy against
+                            <code>max_spend_usd</code>. Returns <code>403 Forbidden</code> if exceeded.</p>
+                        <p class="muted" style="margin-top: 12px;"><strong>Per-Policy Rate Limits:</strong> Controlled
+                            by <code>max_requests_per_minute</code>. Returns <code>429 Too Many Requests</code> if
+                            exceeded.</p>
+                        <p class="muted" style="margin-top: 12px;"><strong>High-Risk Auth (x402):</strong> Actions
+                            requesting <code>amount_usd</code> >= <code>$1,000</code> automatically fail with
+                            <code>402 Payment Required</code> unless a valid Solana signature is attached.</p>
                     </div>
 
                     <div class="code-block-wrapper">
