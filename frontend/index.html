@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel Auth Login</title>
+    <title>Sentinel Auth - Secure AI Agents</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,24 +13,124 @@
         rel="stylesheet">
 </head>
 
-<body class="login-body">
-    <div class="login-shell">
+<body class="login-body" style="overflow-y: auto; overflow-x: hidden;">
+    <div class="login-shell" style="min-height: auto;">
         <canvas id="gravity-canvas" class="gravity-canvas" aria-hidden="true"></canvas>
 
-        <main class="login-layout">
-            <section class="login-minimal">
-                <div class="login-stage">
+        <nav id="main-nav" class="topbar" style="position: fixed; top: 0; left: 0; right: 0; z-index: 100; transition: all 0.3s ease; padding: 24px 20px; border-bottom: 1px solid transparent;">
+            <div style="max-width: 1240px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <a class="brand-link" href="/" style="display: flex; align-items: center; gap: 10px; font-size: 1.4rem;">
+                    <svg width="28" height="28" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="120" height="120" rx="28" fill="#1d1813" />
+                        <rect width="104" height="104" x="8" y="8" rx="20" fill="none" stroke="#6a5d4b" stroke-width="2" opacity="0.3" />
+                        <path d="M 82 42 C 82 24, 38 24, 38 42 C 38 56, 82 64, 82 78 C 82 96, 38 96, 38 78" fill="none" stroke="#c99863" stroke-width="16" stroke-linecap="round" />
+                        <circle cx="82" cy="42" r="4" fill="#e8dfd2" />
+                        <circle cx="38" cy="78" r="4" fill="#e8dfd2" />
+                    </svg>
+                    Sentinel Auth
+                </a>
+                <div class="topbar-links">
+                    <a class="topbar-link" href="/documentation/index.html">Documentation</a>
+                    <button onclick="document.getElementById('launch-login-button').click()" class="btn btn-secondary" style="padding: 10px 18px; font-size: 0.9rem;">Sign In</button>
+                </div>
+            </div>
+        </nav>
+
+        <main class="login-layout" style="padding: 0; max-width: 1240px; margin: 0 auto;">
+            
+            <section id="hero-section" style="min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;">
+                <div id="hero-content" class="login-stage" style="width: 100%; transition: transform 0.1s ease-out, opacity 0.1s ease-out; will-change: transform, opacity; margin-top: -40px;">
                     <div id="login-title-shell" class="login-title-shell">
-                        <p class="login-kicker">Sentinel Auth</p>
-                        <h1 id="login-title" class="login-title">Secure access with Sentinel.</h1>
+                        <p class="login-kicker">The Authorization Layer for AI</p>
+                        <h1 id="login-title" class="login-title" style="max-width: 14ch;">Secure access with Sentinel.</h1>
+                        <p class="hero-copy" style="font-size: 1.25rem; max-width: 680px; text-align: center; color: var(--muted); margin-top: 24px;">
+                            Set strict financial boundaries for your autonomous AI agents. Verify high-risk actions and anchor every LLM decision immutably on the Solana blockchain.
+                        </p>
                     </div>
-                    <div class="login-actions login-actions-row">
-                        <button id="launch-register-button" class="btn btn-secondary btn-launch" type="button">Sign
-                            Up</button>
-                        <button id="launch-login-button" class="btn btn-primary btn-launch" type="button">Login</button>
+                    <div class="login-actions login-actions-row" style="margin-top: 40px;">
+                        <button id="launch-register-button" class="btn btn-primary btn-launch" type="button">Start Building</button>
+                        <button id="launch-login-button" class="btn btn-secondary btn-launch" type="button">Developer Login</button>
                     </div>
                 </div>
             </section>
+
+            <div id="scroll-content" style="position: relative; z-index: 20; padding-bottom: 12vh; display: flex; flex-direction: column; gap: 6vh;">
+                
+                <section class="grid">
+                    <div class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Policy Engine</p>
+                            <h2 style="font-size: 1.8rem; margin-top: 8px;">Strict Agent Boundaries</h2>
+                        </div>
+                        <p class="muted">Never let an AI agent drain your bank account. Define strict JSON policies that enforce maximum spend limits, allowed HTTP methods, and rate limits. If an agent hallucinates or goes rogue, Sentinel blocks the request before it reaches your real APIs.</p>
+                    </div>
+                    <div class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Web3 Proofs</p>
+                            <h2 style="font-size: 1.8rem; margin-top: 8px;">Solana-Backed Audits</h2>
+                        </div>
+                        <p class="muted">Trust but verify. Every decision Sentinel makes—whether an action is allowed or blocked—is cryptographically hashed and anchored to the Solana devnet. You get a permanent, immutable Web3 receipt proving exactly what the AI intended to do.</p>
+                    </div>
+                </section>
+
+                <section class="panel" style="padding: 48px;">
+                    <div class="grid" style="align-items: center; gap: 48px;">
+                        <div>
+                            <div class="section-heading">
+                                <p class="eyebrow">High-Risk Intercept</p>
+                                <h2 style="font-size: 2.2rem; margin-top: 8px; line-height: 1.1;">The 402 Payment Required Flow</h2>
+                            </div>
+                            <p class="muted" style="font-size: 1.1rem; margin-bottom: 16px;">Some actions are too expensive to trust to AI alone. If an agent requests an action that exceeds your high-risk threshold (e.g., spending over $1,000), Sentinel automatically intercepts it with an HTTP <code>402 Payment Required</code> challenge.</p>
+                            <p class="muted" style="font-size: 1.1rem;">The agent is temporarily blocked and must provide a valid cryptographic signature (an x402 token) from an authorized developer's Solana wallet before the action is unlocked and executed.</p>
+                        </div>
+                        <div class="snippet-group" style="background: #111; padding: 0; overflow: hidden; box-shadow: 0 24px 40px rgba(0,0,0,0.2);">
+                            <div class="snippet-header" style="background: #1a1a1a; color: #ef4444; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; padding: 12px 16px; border-bottom: 1px solid #333;">
+                                <span style="display: inline-block; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; margin-right: 8px;"></span>
+                                Blocked: High Risk Action Intercepted
+                            </div>
+                            <pre class="snippet" style="margin-top: 0; background: transparent; padding: 20px; font-size: 0.9rem;">
+{
+  <span style="color: #6a5d4b;">"error"</span>: {
+    <span style="color: #6a5d4b;">"status"</span>: <span style="color: #c99863;">402</span>,
+    <span style="color: #6a5d4b;">"detail"</span>: <span style="color: #e8dfd2;">"High-risk actions require a verified payment token via x-solana-tx-signature header."</span>
+  }
+}</pre>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel" style="padding: 48px;">
+                    <div class="section-heading" style="text-align: center; margin-bottom: 40px;">
+                        <p class="eyebrow">Developer Experience</p>
+                        <h2 style="font-size: 2.2rem; margin-top: 8px;">Built for Agentic Workflows</h2>
+                        <p class="muted" style="max-width: 600px; margin: 16px auto 0; font-size: 1.1rem;">Easily integrate Sentinel into your OpenAI, Anthropic, or Gemini tool-calling loops. Ask for permission first, execute second.</p>
+                    </div>
+                    <div class="snippet-group" style="background: #1d1813; max-width: 800px; margin: 0 auto; padding: 0; overflow: hidden; box-shadow: 0 24px 40px rgba(0,0,0,0.2);">
+                        <div class="snippet-header" style="background: #251f18; color: #c99863; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; padding: 12px 16px; border-bottom: 1px solid #3a2c18;">
+                            agent-execution-loop.js
+                        </div>
+                        <pre class="snippet" style="background: transparent; margin: 0; padding: 24px; font-size: 0.95rem; line-height: 1.6;">
+<span style="color: #6a5d4b;">// 1. Agent intercepts intent and asks Sentinel for permission</span>
+<span style="color: #c99863;">const</span> auth = <span style="color: #c99863;">await</span> fetch(<span style="color: #e8dfd2;">'https://api.sentinel-auth.com/v1/authorize'</span>, {
+  method: <span style="color: #e8dfd2;">'POST'</span>,
+  headers: { <span style="color: #e8dfd2;">'Authorization'</span>: <span style="color: #e8dfd2;">`Bearer ${API_KEY}`</span> },
+  body: JSON.stringify({
+    policy_id: <span style="color: #e8dfd2;">"pol_strict_financial"</span>,
+    action: { type: <span style="color: #e8dfd2;">"wire_transfer"</span>, amount_usd: <span style="color: #c99863;">50.0</span> },
+    reasoning_trace: <span style="color: #e8dfd2;">"Transferring funds as requested by user."</span>
+  })
+});
+
+<span style="color: #6a5d4b;">// 2. Sentinel validates the policy and anchors to Solana</span>
+<span style="color: #c99863;">const</span> { allowed, receipt_signature } = <span style="color: #c99863;">await</span> auth.json();
+
+<span style="color: #c99863;">if</span> (allowed) {
+  <span style="color: #6a5d4b;">// 3. Action is safe. Execute the real financial API!</span>
+  executeWireTransfer(receipt_signature);
+}</pre>
+                    </div>
+                </section>
+            </div>
         </main>
 
         <section id="auth-overlay" class="auth-overlay auth-overlay-hidden" aria-hidden="true">
@@ -85,6 +185,42 @@
             </div>
         </section>
     </div>
+
+    <script>
+        window.addEventListener('scroll', () => {
+            const scrollY = window.scrollY;
+            const heroContent = document.getElementById('hero-content');
+            const mainNav = document.getElementById('main-nav');
+            
+            // 1. Zoom out and fade hero content on scroll
+            // Scales from 1.0 down to 0.85 as the user scrolls down 800px
+            let scale = Math.max(0.85, 1 - (scrollY / 800));
+            // Fades out gracefully over the first 600px of scroll
+            let opacity = Math.max(0, 1 - (scrollY / 600));
+            // Slight parallax effect pushing it downwards as it fades
+            let translateY = scrollY * 0.4;
+            
+            if (heroContent) {
+                heroContent.style.transform = `translateY(${translateY}px) scale(${scale})`;
+                heroContent.style.opacity = opacity;
+            }
+
+            // 2. Add glassmorphism to the sticky navbar when scrolling past the top
+            if (mainNav) {
+                if (scrollY > 50) {
+                    mainNav.style.background = 'rgba(247, 244, 239, 0.85)';
+                    mainNav.style.backdropFilter = 'blur(12px)';
+                    mainNav.style.borderBottom = '1px solid rgba(58, 44, 24, 0.1)';
+                    mainNav.style.padding = '16px 20px';
+                } else {
+                    mainNav.style.background = 'transparent';
+                    mainNav.style.backdropFilter = 'none';
+                    mainNav.style.borderBottom = '1px solid transparent';
+                    mainNav.style.padding = '24px 20px';
+                }
+            }
+        });
+    </script>
 
     <script type="module" src="/app.js"></script>
 </body>
