@@ -21,9 +21,6 @@ const loginPanel = document.getElementById("login-panel");
 const registerPanel = document.getElementById("register-panel");
 const loginForm = document.getElementById("login-form");
 const registerForm = document.getElementById("register-form");
-const accountBar = document.getElementById("account-bar");
-const accountBarIdentity = document.getElementById("account-bar-identity");
-const accountBarLogout = document.getElementById("account-bar-logout");
 
 const pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, active: false };
 const particles = [];
@@ -44,40 +41,10 @@ function saveSession(sessionToken) {
     localStorage.setItem(STORAGE_KEYS.sessionToken, sessionToken);
 }
 
-function showAccountBar(label) {
-    accountBarIdentity.textContent = label;
-    accountBar.classList.remove("account-bar-hidden");
-    launchLoginButton.style.display = "none";
-    launchRegisterButton.style.display = "none";
-}
-
-function hideAccountBar() {
-    accountBar.classList.add("account-bar-hidden");
-    launchLoginButton.style.display = "";
-    launchRegisterButton.style.display = "";
-}
-
-function logoutFromBar() {
-    localStorage.removeItem(STORAGE_KEYS.sessionToken);
-    hideAccountBar();
-}
-
-async function restoreSession() {
+function restoreSession() {
     const sessionToken = localStorage.getItem(STORAGE_KEYS.sessionToken);
-    if (!sessionToken) return;
-
-    try {
-        const response = await fetch(`${resolveApiBase()}/v1/accounts/me`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-        });
-        if (!response.ok) throw new Error("Session expired");
-        const account = await response.json();
-        const label = account.full_name
-            ? `${account.email} (${account.full_name})`
-            : account.email;
-        showAccountBar(label);
-    } catch {
-        localStorage.removeItem(STORAGE_KEYS.sessionToken);
+    if (sessionToken) {
+        window.location.href = "/dashboard.html";
     }
 }
 
@@ -249,15 +216,8 @@ async function authenticate(path, payload, successMessage) {
 
     saveSession(data.session_token);
     authStatus.textContent = successMessage;
-
-    const account = data.account || data;
-    const label = account.full_name
-        ? `${account.email} (${account.full_name})`
-        : account.email;
-
     window.setTimeout(() => {
-        closeAuthOverlay();
-        showAccountBar(label);
+        window.location.href = "/dashboard.html";
     }, 420);
 }
 
@@ -267,7 +227,6 @@ launchRegisterButton.addEventListener("click", () => launchAuth(launchRegisterBu
 closeAuthButton.addEventListener("click", closeAuthOverlay);
 showLoginTab.addEventListener("click", () => setActiveTab("login"));
 showRegisterTab.addEventListener("click", () => setActiveTab("register"));
-accountBarLogout.addEventListener("click", logoutFromBar);
 
 loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
