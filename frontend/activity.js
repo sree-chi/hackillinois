@@ -27,6 +27,7 @@ function resolveApiBase() {
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const cfgApiKey = document.getElementById("cfg-api-key");
 const cfgPolicyId = document.getElementById("cfg-policy-id");
+const cfgForm = document.getElementById("cfg-form");
 const loadBtn = document.getElementById("load-btn");
 const killSwitchBtn = document.getElementById("kill-switch-btn");
 const ksOverlay = document.getElementById("ks-confirm-overlay");
@@ -117,10 +118,10 @@ async function loadAccountInfo() {
         });
         STATE.account = data.account;
         STATE.apiKeys = data.api_keys || [];
-        accountChip.textContent = STATE.account.email;
+        accountChip.textContent = `${STATE.account.email}${STATE.account.full_name ? ' | ' + STATE.account.full_name : ''}`;
         const hasActive = STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
         killSwitchBtn.disabled = !hasActive;
-    } catch { /* session may have expired */ }
+    } catch { /* session expired or no session */ }
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ async function loadStats() {
         budgetSub.textContent = `${fmt(pct, 1)}% of policy budget consumed`;
         budgetRemLabel.textContent = `${fmtUSD(data.remaining_credit_usd)} remaining`;
     } else {
-        budgetLimit.textContent = "/ No spend limit set";
+        budgetLimit.textContent = "/ No spend limit";
         budgetBar.style.width = "0%";
         budgetSub.textContent = "This policy has no maximum spend limit configured.";
         budgetRemLabel.textContent = "Unlimited";
@@ -176,11 +177,7 @@ function agentIsActive(agent) {
 function renderAgents() {
     agentCount.textContent = `${STATE.agents.length} registered`;
     if (!STATE.agents.length) {
-        agentList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">🤖</div>
-                No agents registered yet. Add one above to link a wallet to a named identity.
-            </div>`;
+        agentList.innerHTML = `<div class="empty-state">No agents registered yet. Add one above to link a wallet to a named identity.</div>`;
         return;
     }
     agentList.innerHTML = STATE.agents.map(a => {
@@ -190,18 +187,18 @@ function renderAgents() {
             <div class="agent-status-dot ${active ? "dot-active" : "dot-idle"}"></div>
             <div class="agent-info">
                 <div class="agent-name">${esc(a.name)}</div>
-                <div class="agent-wallet">${a.wallet_address ? esc(a.wallet_address) : "No wallet linked"}</div>
+                <div class="agent-wallet-addr">${a.wallet_address ? esc(a.wallet_address) : "No wallet linked"}</div>
             </div>
-            <button class="btn-sm btn-sm-danger" data-delete-agent="${esc(a.agent_id)}">Remove</button>
+            <button class="btn-remove" data-delete-agent="${esc(a.agent_id)}">Remove</button>
         </div>`;
     }).join("");
 }
 
-document.getElementById("add-agent-btn").addEventListener("click", async () => {
+addAgentBtn.addEventListener("click", async () => {
     const name = newAgentName.value.trim();
     const wallet = newAgentWallet.value.trim() || null;
     if (!name) { toast("Agent name is required.", "error"); return; }
-    if (!STATE.sessionToken) { toast("You must be signed in to register agents.", "error"); return; }
+    if (!STATE.sessionToken) { toast("Sign in to register agents.", "error"); return; }
     addAgentBtn.disabled = true;
     try {
         await apiFetch("/v1/agents", {
@@ -247,13 +244,14 @@ function verifyBadge(audit) {
 
 function renderAuditCard(audit) {
     const isAllowed = audit.status === "allowed";
-    const receiptBadgeClass = audit.receipt_status === "anchored" ? "badge-anchored" : "badge-pending";
+    const statusClass = isAllowed ? "status-success" : "status-danger";
+    const receiptClass = audit.receipt_status === "anchored" ? "status-success" : "status-warning";
 
     const traceHtml = audit.reasoning_trace
-        ? `<div class="audit-trace">💬 ${esc(audit.reasoning_trace)}</div>` : "";
+        ? `<div class="audit-trace-block">💬 ${esc(audit.reasoning_trace)}</div>` : "";
 
     const violationHtml = audit.violation?.explanation
-        ? `<div class="audit-violation">⛔ ${esc(audit.violation.explanation)}</div>` : "";
+        ? `<div class="audit-violation-block">⛔ ${esc(audit.violation.explanation)}</div>` : "";
 
     const solanaLink = audit.explorer_url
         ? `<a class="solana-link" href="${esc(audit.explorer_url)}" target="_blank" rel="noreferrer">🔗 View on Solana Explorer ↗</a>` : "";
@@ -264,24 +262,24 @@ function renderAuditCard(audit) {
     return `
     <div class="audit-card ${isAllowed ? "allowed" : "blocked"}">
         <div class="audit-top">
-            <div class="audit-action">
+            <div class="audit-action-label">
                 ${esc(audit.action_type)}<span>${esc(audit.http_method)} ${esc(audit.resource)}</span>
             </div>
-            <div style="display:flex;gap:0.35rem;align-items:center;flex-shrink:0;">
+            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
                 ${verifyBadge(audit)}
-                <span class="status-badge ${isAllowed ? "badge-allowed" : "badge-blocked"}">${esc(audit.status)}</span>
+                <span class="status-pill ${statusClass}">${esc(audit.status)}</span>
             </div>
         </div>
-        <div class="audit-meta">
+        <div class="audit-meta-row">
             <span>${esc(audit.requester)}</span>
             <span class="sep">·</span>
             <span>${timeAgo(audit.created_at)}</span>
             ${audit.amount_usd != null ? `<span class="sep">·</span><span>${fmtUSD(audit.amount_usd)}</span>` : ""}
             <span class="sep">·</span>
-            <span class="status-badge ${receiptBadgeClass}">${esc(audit.receipt_status)}</span>
+            <span class="status-pill ${receiptClass}" style="padding:4px 10px; font-size:0.72rem;">${esc(audit.receipt_status)}</span>
         </div>
         ${traceHtml}${violationHtml}
-        <div class="audit-grid">
+        <div class="audit-detail-grid">
             <div class="audit-kv">
                 <span class="audit-kv-label">Action Hash</span>
                 <span class="audit-kv-value" title="${esc(audit.action_hash || "")}">${esc(hashShort)}</span>
@@ -306,10 +304,9 @@ function renderAuditFeed() {
 
     auditFeed.innerHTML = audits.length
         ? audits.map(renderAuditCard).join("")
-        : `<div class="empty-state"><div class="empty-icon">🔍</div>No events match this filter.</div>`;
+        : `<div class="empty-state">No events match this filter.</div>`;
 }
 
-// Filter chips
 document.querySelectorAll(".filter-chip").forEach(chip => {
     chip.addEventListener("click", () => {
         document.querySelectorAll(".filter-chip").forEach(c => c.classList.remove("active-chip"));
@@ -370,7 +367,10 @@ async function loadDashboard() {
     }
 }
 
-loadBtn.addEventListener("click", loadDashboard);
+cfgForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    loadDashboard();
+});
 
 // ── Init ───────────────────────────────────────────────────────────────────
 (async function init() {
