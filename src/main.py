@@ -17,18 +17,16 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from src.auth import (
     api_key_prefix,
-    check_auth_rate_limit,
     extract_api_key,
     generate_api_key,
     generate_phone_verification_code,
     generate_session_token,
     hash_api_key,
-    hash_password,
     hash_phone_verification_code,
+    hash_password,
     hash_session_token,
     normalize_email,
     normalize_phone_number,
-    validate_email,
     verify_account_session,
     verify_admin_key,
     verify_api_key,
@@ -36,15 +34,14 @@ from src.auth import (
 )
 from src.database import Base, engine, get_db
 from src.models import (
-    AccountApiPricingRecord,
     AccountDashboardResponse,
-    AccountRecord,
     AccountSessionResponse,
     AgentIntentRequest,
     AgentRecord,
     AuditRecord,
-    AuditStatsResponse,
     AuditStatus,
+    AuditStatsResponse,
+    AccountRecord,
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
@@ -52,17 +49,16 @@ from src.models import (
     CreateAgentRequest,
     LinkedWalletRecord,
     LoginAccountRequest,
+    PhoneCodeChallengeResponse,
     PublicApiOverview,
     CreatePolicyRequest,
     ErrorEnvelope,
     IssueApiKeyRequest,
     IssueApiKeyResponse,
-    PhoneCodeChallengeResponse,
     RegisterAccountRequest,
     ReceiptStatus,
     RequestPhoneCodeRequest,
     SafetyViolation,
-    UpdateApiPricingRequest,
     VerifyPhoneCodeRequest,
     VerifyProofRequest,
     VerifyProofResult,
@@ -149,6 +145,9 @@ def ensure_runtime_schema_compatibility() -> None:
             statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS required_approvers JSONB NOT NULL DEFAULT '[]'::jsonb")
         else:
             statements.append("ALTER TABLE policies ADD COLUMN required_approvers JSON NOT NULL DEFAULT '[]'")
+
+    if not statements:
+        pass
 
     if "audit_records" in table_names:
         audit_columns = {column["name"] for column in inspector.get_columns("audit_records")}
@@ -261,7 +260,6 @@ def error_response(
     request_id: str | None = None,
     policy_id: str | None = None,
     details: dict | None = None,
-    extra_headers: dict | None = None,
 ) -> HTTPException:
     return HTTPException(
         status_code=status_code,
@@ -275,8 +273,7 @@ def error_response(
                 "status": status_code,
                 "details": details or {},
             }
-        ).model_dump(),
-        headers=extra_headers or {},
+        ).model_dump()
     )
 
 
@@ -319,17 +316,8 @@ def build_session_response(account: AccountRecord, request: Request, store: Data
 
 @app.post("/v1/accounts/register", response_model=AccountSessionResponse, status_code=status.HTTP_201_CREATED)
 def register_account(payload: RegisterAccountRequest, request: Request, db: Session = Depends(get_db)):
-    client_ip = request.client.host if request.client else "unknown"
-    check_auth_rate_limit(client_ip)
-
-    email = normalize_email(payload.email)
-    if not validate_email(email):
-        raise error_response(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            code="INVALID_EMAIL",
-            message="The provided email address is not valid.",
-        )
     store = DatabaseStore(db)
+    email = normalize_email(payload.email)
     if store.get_account_by_email(email):
         raise error_response(
             status_code=status.HTTP_409_CONFLICT,
@@ -342,9 +330,6 @@ def register_account(payload: RegisterAccountRequest, request: Request, db: Sess
 
 @app.post("/v1/accounts/login", response_model=AccountSessionResponse)
 def login_account(payload: LoginAccountRequest, request: Request, db: Session = Depends(get_db)):
-    client_ip = request.client.host if request.client else "unknown"
-    check_auth_rate_limit(client_ip)
-
     store = DatabaseStore(db)
     email = normalize_email(payload.email)
     account_row = store.get_account_by_email(email)
@@ -475,41 +460,6 @@ def account_dashboard(
         api_keys=store.list_api_clients_for_account(account.account_id),
         linked_wallets=store.list_wallets_for_account(account.account_id),
     )
-
-
-@app.get("/v1/accounts/me/keys/{client_id}/pricing", response_model=AccountApiPricingRecord)
-def get_account_api_key_pricing(
-    client_id: str,
-    account: AccountRecord = Depends(verify_account_session),
-    db: Session = Depends(get_db),
-):
-    store = DatabaseStore(db)
-    pricing = store.get_api_pricing_for_account(account.account_id, client_id)
-    if not pricing:
-        raise error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="API_PRICING_NOT_FOUND",
-            message="No pricing profile exists for this API key.",
-        )
-    return pricing
-
-
-@app.put("/v1/accounts/me/keys/{client_id}/pricing", response_model=AccountApiPricingRecord)
-def upsert_account_api_key_pricing(
-    client_id: str,
-    payload: UpdateApiPricingRequest,
-    account: AccountRecord = Depends(verify_account_session),
-    db: Session = Depends(get_db),
-):
-    store = DatabaseStore(db)
-    pricing = store.upsert_api_pricing_for_account(account.account_id, client_id, payload)
-    if not pricing:
-        raise error_response(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="API_KEY_NOT_FOUND",
-            message="The requested API key does not exist for this account.",
-        )
-    return pricing
 
 
 @app.post(
@@ -993,17 +943,8 @@ def authorize(
 
     method = payload.action.http_method.upper()
     violation: SafetyViolation | None = None
-    action_payload = payload.action.model_dump(exclude_none=True, exclude_defaults=True)
-    payment_verification_payload = {
-        "policy_id": payload.policy_id,
-        "requester": payload.requester,
-        "action": action_payload,
-        "reasoning_trace": payload.reasoning_trace,
-    }
-    if payload.origin_service is not None:
-        payment_verification_payload["origin_service"] = payload.origin_service
-    if payload.agent_wallet is not None:
-        payment_verification_payload["agent_wallet"] = payload.agent_wallet
+    action_payload = payload.action.model_dump()
+    payment_verification_payload = payload.model_dump()
     verification_payload = {
         "policy_id": payload.policy_id,
         "policy_hash": policy.policy_hash,
@@ -1300,7 +1241,7 @@ def verify_proof(payload: VerifyProofRequest, db: Session = Depends(get_db)):
         "policy_hash": payload.proof.policy_hash,
         "origin_service": payload.proof.origin_service,
         "agent_wallet": payload.proof.agent_wallet,
-        "action": payload.action.model_dump(exclude_none=True, exclude_defaults=True),
+        "action": payload.action.model_dump(),
     })
 
     if payload.verifier != payload.proof.target_service:

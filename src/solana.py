@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import json
 import logging
 import os
@@ -113,8 +112,8 @@ class SolanaReceiptService:
     def _intent_hash(self, payload: dict[str, Any]) -> str:
         normalized = self._normalize_payload(payload)
         canonical_payload = json.dumps(
-            normalized,
-            sort_keys=True,
+            normalized, 
+            sort_keys=True, 
             separators=(",", ":"),
             ensure_ascii=False,
         )
@@ -146,13 +145,10 @@ class SolanaReceiptService:
         return f"mockproof_{digest}"
 
     def build_mock_payment_token(self, payload: dict[str, Any]) -> str:
-        canonical = json.dumps(self._normalize_payload(payload), sort_keys=True, separators=(",", ":"))
-        digest = hmac.new(
-            self.mock_signing_secret.encode("utf-8"),
-            canonical.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        return f"mock_x402_{digest[:32]}"
+        serialized_payload = json.dumps(payload, separators=(",", ":"))
+        encoded = base64.b64encode(serialized_payload.encode("utf-8")).decode("ascii")
+        token_body = "".join(ch for ch in encoded if ch.isalnum())[:24]
+        return f"mock_x402_{token_body}"
 
     def action_hash(self, payload: dict[str, Any]) -> str:
         return self._intent_hash(payload)
@@ -330,7 +326,7 @@ class SolanaReceiptService:
     def verify_authorization_proof(self, claims: dict[str, Any], signature: str) -> bool:
         unsigned_claims = {key: value for key, value in claims.items() if key != "signature"}
         expected = self._proof_signature(unsigned_claims)
-        return hmac.compare_digest(expected, signature)
+        return expected == signature
 
     def verify_high_risk_signature(self, signature: str | None, payload: dict[str, Any], action_hash: str | None = None) -> bool:
         if not signature:
