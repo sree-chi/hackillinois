@@ -1,11 +1,3 @@
-"""Authentication helpers and dependencies for Sentinel Auth API.
-
-This file provides:
-- API key extraction and verification (admin key + per-client API keys stored in DB)
-- Session token handling and verification
-- Password hashing and verification utilities
-- A simple in-process rate limiter for authentication endpoints
-"""
 from __future__ import annotations
 
 import base64
@@ -84,11 +76,6 @@ def normalize_phone_number(phone_number: str) -> str:
     return normalized
 
 
-def validate_email(email: str) -> bool:
-    """Return True if email looks structurally valid."""
-    return bool(_EMAIL_RE.match(email))
-
-
 # ── In-process rate limiter for auth endpoints ────────────────────────────────
 _auth_rate_lock = threading.Lock()
 # Maps IP -> deque of attempt timestamps
@@ -113,6 +100,44 @@ def check_auth_rate_limit(ip: str) -> None:
                 headers={"Retry-After": str(_AUTH_RATE_WINDOW_SECONDS)},
             )
         dq.append(now)
+
+# time limit buffer implementation
+_key_buffer_lock = threading.Lock()
+_key_last_seen: dict[str, datetime] = {}
+_KEY_BUFFER_SECONDS = float(os.getenv("KEY_BUFFER_SECONDS", "1.0"))
+_KEY_BUFFER_EVICT_AFTER = 3600.0
+
+def _key_identity(candidate: str) -> str:
+    return hashlib.sha256(candidate.encode("utf-8")).hexdigest()[:16]
+
+
+def check_key_security_buffer(candidate: str) -> None:
+    identity = _key_identity(candidate)
+    now = datetime.now(_tz.utc)
+    with _key_buffer_lock:
+        # Opportunistically evict stale entries to keep the dict bounded
+        stale_cutoff = now - timedelta(seconds=_KEY_BUFFER_EVICT_AFTER)
+        stale = [k for k, ts in _key_last_seen.items() if ts < stale_cutoff]
+        for k in stale:
+            del _key_last_seen[k]
+
+        last = _key_last_seen.get(identity)
+        if last is not None:
+            elapsed = (now - last).total_seconds()
+            if elapsed < _KEY_BUFFER_SECONDS:
+                retry_after = _KEY_BUFFER_SECONDS - elapsed
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        f"Request rate too high. Please wait at least "
+                        f"{_KEY_BUFFER_SECONDS:.1f}s between calls."
+                    ),
+                    headers={
+                        "Retry-After": f"{retry_after:.3f}",
+                        "X-RateLimit-Reset": f"{retry_after:.3f}",
+                    },
+                )
+        _key_last_seen[identity] = now
 
 
 def validate_email(email: str) -> bool:
