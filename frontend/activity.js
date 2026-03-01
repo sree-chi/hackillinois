@@ -33,6 +33,8 @@ function resolveApiBase() {
 // ── DOM ────────────────────────────────────────────────────────────────────
 const apiKeySelect = document.getElementById("cfg-api-key-select");
 const policySelect = document.getElementById("cfg-policy-select");
+const fullKeyContainer = document.getElementById("full-key-input-container");
+const fullKeyInput = document.getElementById("cfg-full-key-input");
 const loadBtn = document.getElementById("load-btn");
 const notSignedHint = document.getElementById("not-signed-in-hint");
 const killSwitchBtn = document.getElementById("kill-switch-btn");
@@ -182,22 +184,36 @@ apiKeySelect.addEventListener("change", async () => {
     const prefix = apiKeySelect.value;
     if (!prefix) {
         policySelect.innerHTML = `<option value="">Select an API key first…</option>`;
+        fullKeyContainer.classList.add("is-hidden");
         return;
     }
 
     // We need the FULL api key. If user has it stored and prefix matches, use it.
-    // Otherwise, the prefix alone won't work — we need the full key.
-    if (STATE.apiKey && STATE.apiKey.startsWith(prefix.replace('…', ''))) {
-        // Great, stored key matches this prefix
+    const cleanPrefix = prefix.replace('…', '');
+    if (STATE.apiKey && STATE.apiKey.startsWith(cleanPrefix)) {
+        fullKeyContainer.classList.add("is-hidden");
+        await loadPolicies();
     } else {
         // User doesn't have the full key stored for this selection.
-        // Show a notice asking them to paste the full key.
-        policySelect.innerHTML = `<option value="">Paste full API key on Keys page first</option>`;
-        toast("The full API key must be stored. Copy it from the Keys page.", "info");
-        return;
+        policySelect.innerHTML = `<option value="">Waiting for full API key…</option>`;
+        fullKeyContainer.classList.remove("is-hidden");
+        fullKeyInput.value = "";
+        fullKeyInput.focus();
     }
+});
 
-    await loadPolicies();
+fullKeyInput.addEventListener("input", async () => {
+    const val = fullKeyInput.value.trim();
+    const prefix = apiKeySelect.value;
+    if (!prefix) return;
+
+    if (val.startsWith(prefix.replace('…', ''))) {
+        STATE.apiKey = val;
+        localStorage.setItem(STORAGE_KEYS.apiKey, val);
+        fullKeyContainer.classList.add("is-hidden");
+        toast("API key authorized for this device.", "success");
+        await loadPolicies();
+    }
 });
 
 async function loadPolicies() {

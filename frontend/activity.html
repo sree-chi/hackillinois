@@ -740,6 +740,16 @@
                             </select>
                         </label>
                     </div>
+                    <div id="full-key-input-container" class="is-hidden" style="margin-top: 14px;">
+                        <label>
+                            <span>Full API Key (Required for this device)</span>
+                            <input type="password" id="cfg-full-key-input" class="gov-select"
+                                style="width:100%; border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px;"
+                                placeholder="ska_live_...">
+                        </label>
+                        <p class="not-signed-in-hint" style="margin-top: 6px;">You haven't used this key on this device
+                            yet. Paste the full key to authorize the dashboard.</p>
+                    </div>
                     <p id="not-signed-in-hint" class="not-signed-in-hint is-hidden">
                         ⚠️ You need to <a href="/">sign in</a> first. Your API keys and policies will appear here
                         automatically.
