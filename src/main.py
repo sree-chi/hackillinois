@@ -791,25 +791,31 @@ def set_api_pricing(
     account: AccountRecord = Depends(verify_account_session),
     db: Session = Depends(get_db),
 ):
-    store = DatabaseStore(db)
-    client = store.get_api_client_by_id(client_id)
-    if not client:
-        raise HTTPException(status_code=404, detail="API Key not found")
+    try:
+        store = DatabaseStore(db)
+        client = store.get_api_client_by_id(client_id)
+        if not client:
+            raise HTTPException(status_code=404, detail="API Key not found")
 
-    pricing = store.get_api_pricing(client_id, payload.api_link)
-    if pricing:
-        pricing.price_per_call_usd = payload.price_per_call_usd
-        db.commit()
-    else:
-        new_pricing = AccountApiPricingModel(
-            client_id=client_id,
-            api_link=payload.api_link,
-            price_per_call_usd=payload.price_per_call_usd
-        )
-        db.add(new_pricing)
-        db.commit()
+        pricing = store.get_api_pricing(client_id, payload.api_link)
+        if pricing:
+            pricing.price_per_call_usd = payload.price_per_call_usd
+            db.commit()
+        else:
+            new_pricing = AccountApiPricingModel(
+                client_id=client_id,
+                api_link=payload.api_link,
+                price_per_call_usd=payload.price_per_call_usd
+            )
+            db.add(new_pricing)
+            db.commit()
 
-    return {"status": "success"}
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback
+        raise HTTPException(status_code=500, detail={"error": str(exc), "trace": traceback.format_exc()})
 
 @app.get("/v1/accounts/me/keys/{client_id}/pricing")
 def get_api_pricing(
@@ -817,22 +823,28 @@ def get_api_pricing(
     account: AccountRecord = Depends(verify_account_session),
     db: Session = Depends(get_db),
 ):
-    store = DatabaseStore(db)
-    client = store.get_api_client_by_id(client_id)
-    if not client:
-        raise HTTPException(status_code=404, detail="API Key not found")
+    try:
+        store = DatabaseStore(db)
+        client = store.get_api_client_by_id(client_id)
+        if not client:
+            raise HTTPException(status_code=404, detail="API Key not found")
 
-    pricings = store.list_api_pricing(client_id)
-    return {
-        "client_id": client_id,
-        "pricing": [
-            {
-                "api_link": p.api_link,
-                "price_per_call_usd": p.price_per_call_usd,
-                "created_at": p.created_at.isoformat()
-            } for p in pricings
-        ]
-    }
+        pricings = store.list_api_pricing(client_id)
+        return {
+            "client_id": client_id,
+            "pricing": [
+                {
+                    "api_link": p.api_link,
+                    "price_per_call_usd": p.price_per_call_usd,
+                    "created_at": p.created_at.isoformat()
+                } for p in pricings
+            ]
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback
+        raise HTTPException(status_code=500, detail={"error": str(exc), "trace": traceback.format_exc()})
 
 
 @app.post(
