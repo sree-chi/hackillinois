@@ -195,25 +195,28 @@ def ensure_runtime_schema_compatibility() -> None:
             else:
                 statements.append("ALTER TABLE account_phone_verifications ADD COLUMN account_id VARCHAR")
 
-    if "account_api_pricing" not in table_names:
+    if "api_key_pricing" not in table_names:
         if dialect == "postgresql":
             statements.append("""
-                CREATE TABLE IF NOT EXISTS account_api_pricing (
+                CREATE TABLE IF NOT EXISTS api_key_pricing (
+                    id SERIAL PRIMARY KEY,
                     client_id VARCHAR NOT NULL,
                     api_link VARCHAR(500) NOT NULL,
                     price_per_call_usd FLOAT NOT NULL,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    PRIMARY KEY (client_id, api_link)
+                    CONSTRAINT uq_api_key_pricing_client_api UNIQUE (client_id, api_link)
                 )
             """)
+            statements.append("CREATE INDEX IF NOT EXISTS ix_api_key_pricing_client ON api_key_pricing (client_id)")
         else:
             statements.append("""
-                CREATE TABLE IF NOT EXISTS account_api_pricing (
+                CREATE TABLE IF NOT EXISTS api_key_pricing (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     client_id VARCHAR NOT NULL,
                     api_link VARCHAR(500) NOT NULL,
                     price_per_call_usd FLOAT NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (client_id, api_link)
+                    UNIQUE (client_id, api_link)
                 )
             """)
 
@@ -236,22 +239,25 @@ async def lifespan(app: FastAPI):
             dialect = engine.dialect.name
             if dialect == "postgresql":
                 conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS account_api_pricing (
+                    CREATE TABLE IF NOT EXISTS api_key_pricing (
+                        id SERIAL PRIMARY KEY,
                         client_id VARCHAR NOT NULL,
                         api_link VARCHAR(500) NOT NULL,
                         price_per_call_usd FLOAT NOT NULL,
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        PRIMARY KEY (client_id, api_link)
+                        CONSTRAINT uq_api_key_pricing_client_api UNIQUE (client_id, api_link)
                     )
                 """))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_key_pricing_client ON api_key_pricing (client_id)"))
             else:
                 conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS account_api_pricing (
+                    CREATE TABLE IF NOT EXISTS api_key_pricing (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
                         client_id VARCHAR NOT NULL,
                         api_link VARCHAR(500) NOT NULL,
                         price_per_call_usd FLOAT NOT NULL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY (client_id, api_link)
+                        UNIQUE (client_id, api_link)
                     )
                 """))
     yield
@@ -784,31 +790,25 @@ def set_api_pricing(
     account: AccountRecord = Depends(verify_account_session),
     db: Session = Depends(get_db),
 ):
-    try:
-        store = DatabaseStore(db)
-        client = store.get_api_client_by_id(client_id)
-        if not client:
-            raise HTTPException(status_code=404, detail="API Key not found")
+    store = DatabaseStore(db)
+    client = store.get_api_client_by_id(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="API Key not found")
 
-        pricing = store.get_api_pricing(client_id, payload.api_link)
-        if pricing:
-            pricing.price_per_call_usd = payload.price_per_call_usd
-            db.commit()
-        else:
-            new_pricing = AccountApiPricingModel(
-                client_id=client_id,
-                api_link=payload.api_link,
-                price_per_call_usd=payload.price_per_call_usd
-            )
-            db.add(new_pricing)
-            db.commit()
+    pricing = store.get_api_pricing(client_id, payload.api_link)
+    if pricing:
+        pricing.price_per_call_usd = payload.price_per_call_usd
+        db.commit()
+    else:
+        new_pricing = AccountApiPricingModel(
+            client_id=client_id,
+            api_link=payload.api_link,
+            price_per_call_usd=payload.price_per_call_usd
+        )
+        db.add(new_pricing)
+        db.commit()
 
-        return {"status": "success"}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        import traceback
-        raise HTTPException(status_code=500, detail={"error": str(exc), "trace": traceback.format_exc()})
+    return {"status": "success"}
 
 @app.get("/v1/accounts/me/keys/{client_id}/pricing")
 def get_api_pricing(
@@ -816,28 +816,22 @@ def get_api_pricing(
     account: AccountRecord = Depends(verify_account_session),
     db: Session = Depends(get_db),
 ):
-    try:
-        store = DatabaseStore(db)
-        client = store.get_api_client_by_id(client_id)
-        if not client:
-            raise HTTPException(status_code=404, detail="API Key not found")
+    store = DatabaseStore(db)
+    client = store.get_api_client_by_id(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="API Key not found")
 
-        pricings = store.list_api_pricing(client_id)
-        return {
-            "client_id": client_id,
-            "pricing": [
-                {
-                    "api_link": p.api_link,
-                    "price_per_call_usd": p.price_per_call_usd,
-                    "created_at": p.created_at.isoformat()
-                } for p in pricings
-            ]
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        import traceback
-        raise HTTPException(status_code=500, detail={"error": str(exc), "trace": traceback.format_exc()})
+    pricings = store.list_api_pricing(client_id)
+    return {
+        "client_id": client_id,
+        "pricing": [
+            {
+                "api_link": p.api_link,
+                "price_per_call_usd": p.price_per_call_usd,
+                "created_at": p.created_at.isoformat()
+            } for p in pricings
+        ]
+    }
 
 
 @app.post(
