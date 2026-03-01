@@ -264,55 +264,55 @@
                     </section>
                 </section>
 
-                <section class="grid">
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">API Cost Tracking</p>
-                            <h2>API Pricing Database</h2>
-                        </div>
-                        <p class="muted">Add known APIs and their cost per call so Sentinel can calculate spend
-                            effectively.</p>
-
-                        <form id="pricing-form" class="stack" style="margin-top: 1rem;">
-                            <label>
-                                <span>Select API Key</span>
-                                <select id="pricing-client-id" required>
-                                    <option value="">Loading keys...</option>
-                                </select>
-                            </label>
-
-                            <div id="pricing-fields" style="display: none;" class="stack">
-                                <label>
-                                    <span>API Link (e.g., openai/v1/chat/completions)</span>
-                                    <input id="pricing-api-link" type="text" placeholder="Provider/Endpoint expected"
-                                        required>
-                                </label>
-
-                                <label>
-                                    <span>Price per call (USD)</span>
-                                    <input id="pricing-price-per-call" type="number" step="0.000001" min="0"
-                                        placeholder="0.01" required>
-                                </label>
-
-                                <button id="save-pricing-btn" class="btn btn-secondary" type="submit">Save
-                                    Pricing</button>
-                                <div id="pricing-status" class="muted" style="margin-top: 8px;"></div>
+                <section class="panel">
+                    <div class="api-pricing-container"
+                        style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px;">
+                        <div class="pricing-editor" style="border-right: 1px solid var(--line); padding-right: 20px;">
+                            <div class="section-heading">
+                                <p class="eyebrow">API Cost Tracking</p>
+                                <h2>Database Editor</h2>
                             </div>
-                        </form>
-                    </section>
+                            <p class="muted">Add known APIs and their cost per call so Sentinel can calculate spend
+                                effectively.</p>
 
-                    <section class="panel">
-                        <div class="section-heading">
-                            <p class="eyebrow">Saved Values</p>
-                            <h2>Recorded API Prices</h2>
-                        </div>
-                        <p class="muted">Select a key on the left to view its associated API prices. Calls without a
-                            recorded price will be denied.</p>
+                            <form id="pricing-form" class="stack" style="margin-top: 1rem;">
+                                <label>
+                                    <span>Select API Key</span>
+                                    <select id="pricing-client-id" required>
+                                        <option value="">Loading keys...</option>
+                                    </select>
+                                </label>
 
-                        <div id="pricing-list" class="dashboard-list">
-                            <div class="empty-state">Select a key to see saved prices.</div>
+                                <div id="pricing-fields" style="display: none;" class="stack">
+                                    <label>
+                                        <span>API Link / Model</span>
+                                        <input id="pricing-api-link" type="text"
+                                            placeholder="e.g. openai/v1/chat/completions" required>
+                                    </label>
+
+                                    <label>
+                                        <span>Price per call (USD)</span>
+                                        <input id="pricing-price-per-call" type="number" step="0.000001" min="0"
+                                            placeholder="0.01" required>
+                                    </label>
+
+                                    <button id="save-pricing-btn" class="btn btn-secondary" type="submit">Save
+                                        Pricing</button>
+                                    <div id="pricing-status" class="muted" style="margin-top: 8px;"></div>
+                                </div>
+                            </form>
                         </div>
-                    </section>
+                        <div class="pricing-viewer" style="padding-left: 10px;">
+                            <div class="section-heading">
+                                <p class="eyebrow">Saved Values</p>
+                                <h2>Recorded API Prices</h2>
+                            </div>
+                            <p class="muted">Prices for the selected key. Calls without a price will be denied.</p>
+                            <div id="pricing-list" class="dashboard-list" style="max-height: 400px; overflow-y: auto;">
+                                <div class="empty-state">Select a key to see saved prices.</div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <section class="panel">

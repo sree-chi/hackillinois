@@ -279,13 +279,14 @@ function updateSnippets() {
         "  body: JSON.stringify({",
         `    policy_id: "${currentPolicyId || "pol_your_policy_id"}",`,
         '    requester: "agent://ops-bot",',
-        "    action: {",
-        '      type: "wire_transfer",',
+        '    action: {',
+        '      type: "api_call",',
         '      http_method: "POST",',
-        '      resource: "/wallets/treasury",',
-        "      amount_usd: 250",
-        "    },",
-        '    reasoning_trace: "Routine treasury movement requested by the orchestration agent."',
+        '      resource: "openai/v1/chat/completions",',
+        '      amount_usd: 0',
+        '    },',
+        '    reasoning_trace: "Routine LLM call via orchestration agent. Price will be auto-filled by Sentinel server."'
+        ,
         "  })",
         "});",
     ].join("\n");
@@ -654,16 +655,22 @@ runAuthorizeButton.addEventListener("click", async () => {
                 policy_id: currentPolicyId,
                 requester: "agent://account-dashboard-demo",
                 action: {
-                    type: "knowledge_sync",
+                    type: "api_call",
                     http_method: "POST",
-                    resource: "/agents/sync",
-                    amount_usd: 250,
+                    resource: "openai/v1/chat/completions",
+                    amount_usd: 0, // Server will overwrite this from pricing DB
                 },
-                reasoning_trace: "Sync managed agent memory after a successful dashboard test workflow.",
+                reasoning_trace: "Routine LLM call via orchestration agent. Price will be auto-filled by Sentinel server.",
             }),
         });
         const data = await readApiResponse(response);
-        if (!response.ok) throw new Error(JSON.stringify(data));
+        if (!response.ok) {
+            if (data.detail?.code === "PRICE_NOT_FOUND") {
+                log(`Authorization BLOCKED: Missing price for "openai/v1/chat/completions". Please add it in the API Pricing box below first!`, "warning");
+                return;
+            }
+            throw new Error(data.detail?.message || JSON.stringify(data));
+        }
         log(`Authorization allowed. Receipt: ${data.receipt_signature}`, "success");
     } catch (error) {
         log(`Authorization request failed: ${error.message}`, "error");
