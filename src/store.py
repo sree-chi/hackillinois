@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from src.db_models import (
     AccountApiClientModel,
     AccountModel,
+    AccountPhoneVerificationModel,
     AccountSessionModel,
     AccountWalletLinkChallengeModel,
     AccountWalletModel,
@@ -45,11 +46,18 @@ class DatabaseStore:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create_account(self, email: str, password_hash: str, full_name: str | None) -> AccountRecord:
-        account = AccountRecord(email=email, full_name=full_name)
+    def create_account(
+        self,
+        email: str,
+        password_hash: str,
+        full_name: str | None,
+        phone_number: str | None = None,
+    ) -> AccountRecord:
+        account = AccountRecord(email=email, phone_number=phone_number, full_name=full_name)
         row = AccountModel(
             account_id=account.account_id,
             email=account.email,
+            phone_number=account.phone_number,
             full_name=account.full_name,
             password_hash=password_hash,
             created_at=account.created_at,
@@ -61,6 +69,9 @@ class DatabaseStore:
 
     def get_account_by_email(self, email: str) -> AccountModel | None:
         return self.db.query(AccountModel).filter(AccountModel.email == email).first()
+
+    def get_account_by_phone(self, phone_number: str) -> AccountModel | None:
+        return self.db.query(AccountModel).filter(AccountModel.phone_number == phone_number).first()
 
     def get_account_by_id(self, account_id: str) -> AccountRecord | None:
         row = self.db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
@@ -82,6 +93,46 @@ class DatabaseStore:
 
     def get_account_session_by_hash(self, token_hash: str) -> AccountSessionModel | None:
         return self.db.query(AccountSessionModel).filter(AccountSessionModel.token_hash == token_hash).first()
+
+    def create_phone_verification(
+        self,
+        phone_number: str,
+        code_hash: str,
+        full_name: str | None,
+        delivery_channel: str,
+        expires_at: datetime,
+    ) -> AccountPhoneVerificationModel:
+        row = AccountPhoneVerificationModel(
+            verification_id=new_id("pvc"),
+            phone_number=phone_number,
+            code_hash=code_hash,
+            full_name=full_name,
+            delivery_channel=delivery_channel,
+            expires_at=expires_at,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return row
+
+    def get_latest_phone_verification(self, phone_number: str) -> AccountPhoneVerificationModel | None:
+        return (
+            self.db.query(AccountPhoneVerificationModel)
+            .filter(AccountPhoneVerificationModel.phone_number == phone_number)
+            .order_by(AccountPhoneVerificationModel.created_at.desc())
+            .first()
+        )
+
+    def consume_phone_verification(self, verification_id: str) -> None:
+        row = (
+            self.db.query(AccountPhoneVerificationModel)
+            .filter(AccountPhoneVerificationModel.verification_id == verification_id)
+            .first()
+        )
+        if not row:
+            return
+        row.consumed_at = datetime.now(timezone.utc)
+        self.db.commit()
 
     def create_wallet_link_challenge(
         self,

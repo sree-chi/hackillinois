@@ -82,6 +82,7 @@ function apiHeaders() {
 function sessionHeaders() {
     return { Authorization: `Bearer ${STATE.sessionToken}`, "Content-Type": "application/json" };
 }
+function accountIdentity(account) { return account.phone_number || account.email; }
 
 function toast(msg, type = "info") {
     const el = document.createElement("div");
@@ -118,7 +119,7 @@ async function loadAccountInfo() {
         const data = await apiFetch("/v1/accounts/me/dashboard", { headers: { Authorization: `Bearer ${STATE.sessionToken}` } });
         STATE.account = data.account;
         STATE.apiKeys = data.api_keys || [];
-        accountChip.textContent = STATE.account.email;
+        accountChip.textContent = accountIdentity(STATE.account);
         killSwitchBtn.disabled = STATE.apiKeys.filter(k => !k.revoked_at && !k.suspended_at).length === 0;
     } catch { /* session may have expired */ }
 }

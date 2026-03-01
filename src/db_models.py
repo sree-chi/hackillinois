@@ -109,6 +109,7 @@ class AccountModel(Base):
 
     account_id = Column(String, primary_key=True, index=True)
     email = Column(String(200), nullable=False, unique=True, index=True)
+    phone_number = Column(String(20), nullable=True, unique=True, index=True)
     full_name = Column(String(100), nullable=True)
     password_hash = Column(String(200), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -123,6 +124,23 @@ class AccountSessionModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AccountPhoneVerificationModel(Base):
+    __tablename__ = "account_phone_verifications"
+
+    verification_id = Column(String, primary_key=True, index=True)
+    phone_number = Column(String(20), nullable=False, index=True)
+    code_hash = Column(String(64), nullable=False)
+    full_name = Column(String(100), nullable=True)
+    delivery_channel = Column(String(20), nullable=False, default="mock", server_default="mock")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_account_phone_verifications_phone_created", "phone_number", "created_at"),
+    )
 
 
 class AccountWalletModel(Base):

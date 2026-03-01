@@ -15,6 +15,10 @@ let currentLinkedWallets = [];
 let selectedWalletAddress = "";
 let phantomProviderReady = false;
 
+function accountIdentity(account) {
+    return account.phone_number || account.email;
+}
+
 const issueKeyForm = document.getElementById("issue-key-form");
 const issueKeyButton = document.getElementById("issue-key-button");
 const issuedKey = document.getElementById("issued-key");
@@ -286,7 +290,7 @@ function updateDashboardState() {
         return;
     }
 
-    accountSummary.textContent = `${currentAccount.email}${currentAccount.full_name ? ` | ${currentAccount.full_name}` : ""}`;
+    accountSummary.textContent = `${accountIdentity(currentAccount)}${currentAccount.full_name ? ` | ${currentAccount.full_name}` : ""}`;
     sessionMeta.textContent = "Account session active. You can issue and manage API keys from this dashboard.";
     createPolicyButton.disabled = !currentApiKey;
     copyKeyButton.disabled = !currentApiKey;

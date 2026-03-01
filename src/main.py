@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import json
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -13,15 +14,17 @@ from sqlalchemy.orm import Session
 from src.auth import (
     api_key_prefix,
     generate_api_key,
+    generate_phone_verification_code,
     generate_session_token,
     hash_api_key,
+    hash_phone_verification_code,
     hash_password,
     hash_session_token,
-    normalize_email,
+    normalize_phone_number,
+    synthetic_email_for_phone,
     verify_account_session,
     verify_admin_key,
     verify_api_key,
-    verify_password,
 )
 from src.database import Base, engine, get_db
 from src.models import (
@@ -38,15 +41,16 @@ from src.models import (
     AuthorizeRequest,
     CreateAgentRequest,
     LinkedWalletRecord,
-    LoginAccountRequest,
+    PhoneCodeChallengeResponse,
     PublicApiOverview,
     CreatePolicyRequest,
     ErrorEnvelope,
     IssueApiKeyRequest,
     IssueApiKeyResponse,
-    RegisterAccountRequest,
     ReceiptStatus,
+    RequestPhoneCodeRequest,
     SafetyViolation,
+    VerifyPhoneCodeRequest,
     VerifyProofRequest,
     VerifyProofResult,
     UpdatePolicyRequest,
@@ -58,6 +62,7 @@ from src.models import (
     new_id,
 )
 from src.solana import SolanaVerificationError, receipt_service
+from src.sms import SmsDeliveryError, SmsSender
 from src.store import DatabaseStore
 
 logging.basicConfig(
@@ -69,6 +74,7 @@ logger = logging.getLogger("SentinelAuth")
 HIGH_RISK_AMOUNT_USD = float(os.getenv("HIGH_RISK_AMOUNT_USD", "1000"))
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 ACCOUNT_SESSION_TTL_SECONDS = int(os.getenv("ACCOUNT_SESSION_TTL_SECONDS", "86400"))
+PHONE_VERIFICATION_TTL_SECONDS = int(os.getenv("PHONE_VERIFICATION_TTL_SECONDS", "600"))
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
@@ -77,6 +83,7 @@ ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+sms_sender = SmsSender()
 
 
 def ensure_runtime_schema_compatibility() -> None:
@@ -148,6 +155,14 @@ def ensure_runtime_schema_compatibility() -> None:
                 statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP WITH TIME ZONE")
             else:
                 statements.append("ALTER TABLE api_clients ADD COLUMN suspended_at DATETIME")
+
+    if "accounts" in table_names:
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+        if "phone_number" not in account_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20)")
+            else:
+                statements.append("ALTER TABLE accounts ADD COLUMN phone_number VARCHAR(20)")
 
     if not statements:
         return
@@ -242,7 +257,7 @@ def public_overview(request: Request):
         name="Sentinel Auth API",
         status="online",
         docs_url=f"{base_url}/docs",
-        key_endpoint=f"{base_url}/v1/accounts/register",
+        key_endpoint=f"{base_url}/v1/accounts/auth/request-code",
         quickstart=[
             "Create a developer key from the public portal or POST /v1/developer/keys.",
             "Send the key as Authorization: Bearer <key> or X-API-Key.",
@@ -272,33 +287,109 @@ def build_session_response(account: AccountRecord, request: Request, store: Data
     )
 
 
-@app.post("/v1/accounts/register", response_model=AccountSessionResponse, status_code=status.HTTP_201_CREATED)
-def register_account(payload: RegisterAccountRequest, request: Request, db: Session = Depends(get_db)):
+@app.post("/v1/accounts/auth/request-code", response_model=PhoneCodeChallengeResponse, status_code=status.HTTP_201_CREATED)
+def request_phone_code(payload: RequestPhoneCodeRequest, db: Session = Depends(get_db)):
     store = DatabaseStore(db)
-    email = normalize_email(payload.email)
-    if store.get_account_by_email(email):
+    try:
+        phone_number = normalize_phone_number(payload.phone_number)
+    except ValueError as exc:
         raise error_response(
-            status_code=status.HTTP_409_CONFLICT,
-            code="ACCOUNT_ALREADY_EXISTS",
-            message="An account with this email already exists.",
-        )
-    account = store.create_account(email=email, password_hash=hash_password(payload.password), full_name=payload.full_name)
-    return build_session_response(account, request, store)
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_PHONE_NUMBER",
+            message=str(exc),
+        ) from exc
+
+    code = generate_phone_verification_code()
+    try:
+        delivery = sms_sender.send_verification_code(phone_number, code)
+    except SmsDeliveryError as exc:
+        raise error_response(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            code="SMS_DELIVERY_FAILED",
+            message=str(exc),
+        ) from exc
+
+    verification = store.create_phone_verification(
+        phone_number=phone_number,
+        code_hash=hash_phone_verification_code(phone_number, code),
+        full_name=payload.full_name,
+        delivery_channel=str(delivery["delivery_channel"]),
+        expires_at=expires_at(PHONE_VERIFICATION_TTL_SECONDS),
+    )
+    return PhoneCodeChallengeResponse(
+        phone_number=phone_number,
+        expires_at=verification.expires_at,
+        delivery_channel=str(delivery["delivery_channel"]),
+        dev_code=delivery["dev_code"],
+    )
 
 
-@app.post("/v1/accounts/login", response_model=AccountSessionResponse)
-def login_account(payload: LoginAccountRequest, request: Request, db: Session = Depends(get_db)):
+@app.post("/v1/accounts/auth/verify-code", response_model=AccountSessionResponse)
+def verify_phone_code(payload: VerifyPhoneCodeRequest, request: Request, db: Session = Depends(get_db)):
     store = DatabaseStore(db)
-    email = normalize_email(payload.email)
-    account_row = store.get_account_by_email(email)
-    if not account_row or not verify_password(payload.password, account_row.password_hash):
+    try:
+        phone_number = normalize_phone_number(payload.phone_number)
+    except ValueError as exc:
+        raise error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_PHONE_NUMBER",
+            message=str(exc),
+        ) from exc
+
+    verification = store.get_latest_phone_verification(phone_number)
+    if not verification or verification.consumed_at is not None:
         raise error_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            code="INVALID_LOGIN",
-            message="Invalid email or password.",
+            code="INVALID_CODE",
+            message="No active verification code was found for this phone number.",
         )
-    account = AccountRecord.model_validate(account_row)
+
+    verification_expires_at = verification.expires_at
+    if verification_expires_at.tzinfo is None:
+        verification_expires_at = verification_expires_at.replace(tzinfo=timezone.utc)
+    if verification_expires_at <= datetime.now(timezone.utc):
+        raise error_response(
+            status_code=status.HTTP_410_GONE,
+            code="CODE_EXPIRED",
+            message="The verification code has expired.",
+        )
+    if verification.code_hash != hash_phone_verification_code(phone_number, payload.code.strip()):
+        raise error_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="INVALID_CODE",
+            message="The verification code is invalid.",
+        )
+    store.consume_phone_verification(verification.verification_id)
+
+    account_row = store.get_account_by_phone(phone_number)
+    if account_row:
+        account = AccountRecord.model_validate(account_row)
+    else:
+        account = store.create_account(
+            email=synthetic_email_for_phone(phone_number),
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            full_name=payload.full_name or verification.full_name,
+            phone_number=phone_number,
+        )
     return build_session_response(account, request, store)
+
+
+@app.post("/v1/accounts/register", status_code=status.HTTP_410_GONE)
+def register_account():
+    raise error_response(
+        status_code=status.HTTP_410_GONE,
+        code="PHONE_AUTH_REQUIRED",
+        message="Use /v1/accounts/auth/request-code and /v1/accounts/auth/verify-code for phone authentication.",
+    )
+
+
+@app.post("/v1/accounts/login", status_code=status.HTTP_410_GONE)
+def login_account():
+    raise error_response(
+        status_code=status.HTTP_410_GONE,
+        code="PHONE_AUTH_REQUIRED",
+        message="Use /v1/accounts/auth/request-code and /v1/accounts/auth/verify-code for phone authentication.",
+    )
 
 
 @app.get("/v1/accounts/me", response_model=AccountRecord)
@@ -344,7 +435,7 @@ def create_wallet_link_challenge(
     message = receipt_service.build_wallet_link_message(
         domain=request_domain(request),
         wallet_address=wallet_address,
-        account_email=account.email,
+        account_email=account.phone_number or account.email,
         nonce=nonce,
     )
     challenge = store.create_wallet_link_challenge(
@@ -504,13 +595,13 @@ def issue_developer_key(
         api_key_hash=hash_api_key(key),
         api_key_prefix=prefix,
         account_id=account.account_id,
-        owner_email=account.email,
+        owner_email=account.phone_number or account.email,
     )
     base_url = resolve_public_base_url(request)
     return IssueApiKeyResponse(
         client_id=client.client_id,
         app_name=client.app_name,
-        owner_email=account.email,
+        owner_email=account.phone_number or account.email,
         api_key=key,
         api_key_prefix=client.api_key_prefix,
         created_at=client.created_at,

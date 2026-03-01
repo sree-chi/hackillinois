@@ -80,6 +80,7 @@ async function apiFetch(path, opts = {}) {
 
 function apiHeaders() { return { Authorization: `Bearer ${STATE.apiKey}`, "Content-Type": "application/json" }; }
 function sessionHeaders() { return { Authorization: `Bearer ${STATE.sessionToken}`, "Content-Type": "application/json" }; }
+function accountIdentity(account) { return account.phone_number || account.email; }
 
 function toast(msg, type = "info") {
     const el = document.createElement("div");
@@ -118,7 +119,7 @@ async function loadAccountInfo() {
         });
         STATE.account = data.account;
         STATE.apiKeys = data.api_keys || [];
-        accountChip.textContent = `${STATE.account.email}${STATE.account.full_name ? ' | ' + STATE.account.full_name : ''}`;
+        accountChip.textContent = `${accountIdentity(STATE.account)}${STATE.account.full_name ? ' | ' + STATE.account.full_name : ''}`;
         const hasActive = STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
         killSwitchBtn.disabled = !hasActive;
     } catch { /* session expired or no session */ }

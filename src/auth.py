@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import os
 import secrets
+import string
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
@@ -36,12 +37,46 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def normalize_phone_number(phone_number: str) -> str:
+    candidate = phone_number.strip()
+    digits = "".join(character for character in candidate if character in string.digits)
+    if candidate.startswith("+"):
+        normalized = f"+{digits}"
+    elif len(digits) == 10:
+        normalized = f"+1{digits}"
+    elif len(digits) == 11 and digits.startswith("1"):
+        normalized = f"+{digits}"
+    elif 10 <= len(digits) <= 15:
+        normalized = f"+{digits}"
+    else:
+        raise ValueError("Phone number must include 10 to 15 digits.")
+
+    if len(normalized) < 11 or len(normalized) > 16:
+        raise ValueError("Phone number must be in a valid international format.")
+    return normalized
+
+
+def synthetic_email_for_phone(phone_number: str) -> str:
+    digits = "".join(character for character in phone_number if character.isdigit())
+    return f"{digits}@phone.sentinel.local"
+
+
 def generate_session_token() -> str:
     return f"ssa_live_{secrets.token_urlsafe(32)}"
 
 
 def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def generate_phone_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_phone_verification_code(phone_number: str, code: str) -> str:
+    secret = os.getenv("PHONE_CODE_SECRET", "sentinel-phone-code-secret")
+    payload = f"{phone_number}:{code}:{secret}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def hash_password(password: str) -> str:

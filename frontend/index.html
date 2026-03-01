@@ -47,14 +47,17 @@
                 <section id="login-panel" class="auth-panel">
                     <form id="login-form" class="stack">
                         <label>
-                            <span>Email</span>
-                            <input id="login-email" type="email" placeholder="team@example.com" required>
+                            <span>Phone number</span>
+                            <input id="login-phone-number" type="tel" placeholder="+1 555 555 5555" required>
                         </label>
-                        <label>
-                            <span>Password</span>
-                            <input id="login-password" type="password" placeholder="Your password" required>
-                        </label>
-                        <button id="login-button" class="btn btn-primary" type="submit">Login</button>
+                        <button id="login-button" class="btn btn-primary" type="submit">Send code</button>
+                        <div id="login-code-shell" class="stack auth-panel-hidden">
+                            <label>
+                                <span>Temporary code</span>
+                                <input id="login-code" type="text" inputmode="numeric" placeholder="6-digit code" minlength="4" maxlength="12">
+                            </label>
+                            <button id="login-verify-button" class="btn btn-primary" type="button">Verify code</button>
+                        </div>
                     </form>
                 </section>
 
@@ -65,18 +68,21 @@
                             <input id="register-full-name" type="text" placeholder="Optional">
                         </label>
                         <label>
-                            <span>Email</span>
-                            <input id="register-email" type="email" placeholder="team@example.com" required>
+                            <span>Phone number</span>
+                            <input id="register-phone-number" type="tel" placeholder="+1 555 555 5555" required>
                         </label>
-                        <label>
-                            <span>Password</span>
-                            <input id="register-password" type="password" placeholder="Minimum 8 characters" required>
-                        </label>
-                        <button id="register-button" class="btn btn-secondary" type="submit">Create account</button>
+                        <button id="register-button" class="btn btn-secondary" type="submit">Send code</button>
+                        <div id="register-code-shell" class="stack auth-panel-hidden">
+                            <label>
+                                <span>Temporary code</span>
+                                <input id="register-code" type="text" inputmode="numeric" placeholder="6-digit code" minlength="4" maxlength="12">
+                            </label>
+                            <button id="register-verify-button" class="btn btn-secondary" type="button">Create account</button>
+                        </div>
                     </form>
                 </section>
 
-                <div id="auth-status" class="auth-status muted">Choose login or create account to continue.</div>
+                <div id="auth-status" class="auth-status muted">Choose login or create account to continue. In mock mode the code is shown here for local testing.</div>
             </div>
         </section>
     </div>
