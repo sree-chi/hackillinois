@@ -1,23 +1,6 @@
 from __future__ import annotations
 
 import base64
-"""Authentication helpers and dependencies for Sentinel Auth API.
-
-This file provides:
-- API key extraction and verification (admin key + per-client API keys stored in DB)
-- Session token handling and verification
-- Password hashing and verification utilities
-- A simple in-process rate limiter for authentication endpoints
-
-The user requested the file be replaced with this improved version which adds
-stricter startup checks (refuse to run in production with a default key),
-email validation helpers, and an auth attempt rate limiter.
-"""
-#
-
-from __future__ import annotations
-
-import base64
 import hashlib
 import hmac
 import os
@@ -67,11 +50,6 @@ def api_key_prefix(api_key: str) -> str:
 
 def normalize_email(email: str) -> str:
     return email.strip().lower()
-
-
-def validate_email(email: str) -> bool:
-    """Return True if email looks structurally valid."""
-    return bool(_EMAIL_RE.match(email))
 
 
 # ── In-process rate limiter for auth endpoints ────────────────────────────────
