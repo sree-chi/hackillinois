@@ -2,43 +2,40 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func as sql_func
 from sqlalchemy.orm import Session
 
 from src.db_models import (
     AccountApiClientModel,
     AccountModel,
-    AccountPhoneVerificationModel,
     AccountSessionModel,
     AccountWalletLinkChallengeModel,
     AccountWalletModel,
-    AgentModel,
     ApiClientModel,
     AuditRecordModel,
     AuditStatusEnum,
     AuthorizationProofModel,
     PolicyModel,
     ReceiptStatusEnum,
+    AgentModel,
 )
 from src.models import (
     AccountApiKeySummary,
     AccountRecord,
     AccountSessionRecord,
-    AgentRecord,
     ApiClientRecord,
     AuditRecord,
-    AuditStatsResponse,
     AuthorizationProof,
-    CreateAgentRequest,
     CreatePolicyRequest,
     IssueApiKeyRequest,
     LinkedWalletRecord,
-    POLICY_SCHEMA_VERSION,
     Policy,
     WalletLinkChallengeRecord,
     canonical_hash,
     expires_at,
     new_id,
+    CreateAgentRequest,
+    AgentRecord,
+    POLICY_SCHEMA_VERSION,
 )
 
 
@@ -46,18 +43,11 @@ class DatabaseStore:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create_account(
-        self,
-        email: str,
-        password_hash: str,
-        full_name: str | None,
-        phone_number: str | None = None,
-    ) -> AccountRecord:
-        account = AccountRecord(email=email, phone_number=phone_number, full_name=full_name)
+    def create_account(self, email: str, password_hash: str, full_name: str | None) -> AccountRecord:
+        account = AccountRecord(email=email, full_name=full_name)
         row = AccountModel(
             account_id=account.account_id,
             email=account.email,
-            phone_number=account.phone_number,
             full_name=account.full_name,
             password_hash=password_hash,
             created_at=account.created_at,
@@ -69,9 +59,6 @@ class DatabaseStore:
 
     def get_account_by_email(self, email: str) -> AccountModel | None:
         return self.db.query(AccountModel).filter(AccountModel.email == email).first()
-
-    def get_account_by_phone(self, phone_number: str) -> AccountModel | None:
-        return self.db.query(AccountModel).filter(AccountModel.phone_number == phone_number).first()
 
     def get_account_by_id(self, account_id: str) -> AccountRecord | None:
         row = self.db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
@@ -93,59 +80,6 @@ class DatabaseStore:
 
     def get_account_session_by_hash(self, token_hash: str) -> AccountSessionModel | None:
         return self.db.query(AccountSessionModel).filter(AccountSessionModel.token_hash == token_hash).first()
-
-    def create_phone_verification(
-        self,
-        account_id: str | None,
-        phone_number: str,
-        code_hash: str,
-        full_name: str | None,
-        delivery_channel: str,
-        expires_at: datetime,
-    ) -> AccountPhoneVerificationModel:
-        row = AccountPhoneVerificationModel(
-            verification_id=new_id("pvc"),
-            account_id=account_id,
-            phone_number=phone_number,
-            code_hash=code_hash,
-            full_name=full_name,
-            delivery_channel=delivery_channel,
-            expires_at=expires_at,
-        )
-        self.db.add(row)
-        self.db.commit()
-        self.db.refresh(row)
-        return row
-
-    def get_latest_phone_verification(
-        self,
-        phone_number: str,
-        account_id: str | None = None,
-    ) -> AccountPhoneVerificationModel | None:
-        query = self.db.query(AccountPhoneVerificationModel).filter(AccountPhoneVerificationModel.phone_number == phone_number)
-        if account_id is not None:
-            query = query.filter(AccountPhoneVerificationModel.account_id == account_id)
-        return query.order_by(AccountPhoneVerificationModel.created_at.desc()).first()
-
-    def consume_phone_verification(self, verification_id: str) -> None:
-        row = (
-            self.db.query(AccountPhoneVerificationModel)
-            .filter(AccountPhoneVerificationModel.verification_id == verification_id)
-            .first()
-        )
-        if not row:
-            return
-        row.consumed_at = datetime.now(timezone.utc)
-        self.db.commit()
-
-    def update_account_phone_number(self, account_id: str, phone_number: str | None) -> AccountRecord | None:
-        row = self.db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
-        if not row:
-            return None
-        row.phone_number = phone_number
-        self.db.commit()
-        self.db.refresh(row)
-        return AccountRecord.model_validate(row)
 
     def create_wallet_link_challenge(
         self,
@@ -352,6 +286,33 @@ class DatabaseStore:
         row.last_used_at = datetime.now(timezone.utc)
         self.db.commit()
 
+    def rotate_api_client_key(
+        self,
+        account_id: str,
+        client_id: str,
+        new_api_key_hash: str,
+        new_api_key_prefix: str,
+    ) -> ApiClientRecord | None:
+        """Replace the key hash/prefix for an active, non-revoked client owned by account_id."""
+        row = (
+            self.db.query(ApiClientModel)
+            .join(AccountApiClientModel, AccountApiClientModel.client_id == ApiClientModel.client_id)
+            .filter(
+                AccountApiClientModel.account_id == account_id,
+                ApiClientModel.client_id == client_id,
+                ApiClientModel.revoked_at.is_(None),
+            )
+            .first()
+        )
+        if not row:
+            return None
+        row.api_key_hash = new_api_key_hash
+        row.api_key_prefix = new_api_key_prefix
+        row.suspended_at = None  # restore if previously suspended
+        self.db.commit()
+        self.db.refresh(row)
+        return ApiClientRecord.model_validate(row)
+
     def revoke_api_client_for_account(self, account_id: str, client_id: str) -> ApiClientRecord | None:
         row = (
             self.db.query(ApiClientModel)
@@ -415,60 +376,139 @@ class DatabaseStore:
                     "id": existing.id,
                     "name": existing.name,
                     "description": existing.description,
-                    "policy_schema_version": getattr(existing, "policy_schema_version", POLICY_SCHEMA_VERSION),
                     "policy_hash": existing.policy_hash,
                     "rules": existing.rules,
-                    "risk_categories": getattr(existing, "risk_categories", []) or [],
-                    "budget_config": getattr(existing, "budget_config", {}) or {},
-                    "required_approvers": getattr(existing, "required_approvers", []) or [],
+                    "version": existing.version,
+                    "root_policy_id": existing.root_policy_id,
                     "created_at": existing.created_at,
                 })
 
         payload_data = payload.model_dump()
-        policy_hash = canonical_hash(payload.canonical_hash_payload())
+        policy_hash = canonical_hash(payload_data)
         policy = Policy(**payload_data, policy_hash=policy_hash)
 
         row = PolicyModel(
             id=policy.id,
             name=policy.name,
             description=policy.description,
-            policy_schema_version=policy.policy_schema_version,
             policy_hash=policy.policy_hash,
             rules=policy.rules.model_dump(),
-            risk_categories=policy.risk_categories,
-            budget_config=policy.budget_config.model_dump(exclude_none=False),
-            required_approvers=policy.required_approvers,
             created_at=policy.created_at,
             idempotency_key=idempotency_key,
+            version=1,
+            root_policy_id=None,
         )
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
         return policy
 
-    def get_policy(self, policy_id: str) -> Policy | None:
-        row = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
-        if not row:
+    def update_policy(self, policy_id: str, payload) -> Policy | None:
+        """Create a new immutable version in the same lineage as policy_id."""
+        current_row = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
+        if not current_row:
             return None
+
+        # Resolve the lineage root
+        root_id = current_row.root_policy_id or current_row.id
+
+        # Determine next version number within this lineage
+        latest_version = (
+            self.db.query(PolicyModel.version)
+            .filter(
+                (PolicyModel.root_policy_id == root_id) | (PolicyModel.id == root_id)
+            )
+            .order_by(PolicyModel.version.desc())
+            .first()
+        )
+        next_version = (latest_version[0] if latest_version else current_row.version) + 1
+
+        # Build merged data: fall back to current values for unset fields
+        new_name = payload.name if payload.name is not None else current_row.name
+        new_description = payload.description if payload.description is not None else current_row.description
+        new_rules = payload.rules.model_dump() if payload.rules is not None else current_row.rules
+
+        from src.models import PolicyRule
+        rules_obj = PolicyRule.model_validate(new_rules)
+        policy_data = {"name": new_name, "description": new_description, "rules": rules_obj}
+        policy_hash = canonical_hash({"name": new_name, "description": new_description, "rules": new_rules})
+
+        new_id_val = new_id("pol")
+        row = PolicyModel(
+            id=new_id_val,
+            name=new_name,
+            description=new_description,
+            policy_hash=policy_hash,
+            rules=new_rules,
+            version=next_version,
+            root_policy_id=root_id,
+            created_at=None,  # server_default will handle this
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+
         return Policy.model_validate({
             "id": row.id,
             "name": row.name,
             "description": row.description,
-            "policy_schema_version": getattr(row, "policy_schema_version", POLICY_SCHEMA_VERSION),
             "policy_hash": row.policy_hash,
             "rules": row.rules,
-            "risk_categories": getattr(row, "risk_categories", []) or [],
-            "budget_config": getattr(row, "budget_config", {}) or {},
-            "required_approvers": getattr(row, "required_approvers", []) or [],
+            "version": row.version,
+            "root_policy_id": row.root_policy_id,
             "created_at": row.created_at,
         })
 
-    def list_all_policies(self, limit: int = 50, offset: int = 0) -> list[Policy]:
+    def list_policies(self, limit: int = 50, offset: int = 0) -> list[Policy]:
+        """Return only the latest version of each policy lineage."""
+        from sqlalchemy import func
+        # Subquery: for each root (or standalone) policy, find max version
+        subq = (
+            self.db.query(
+                func.coalesce(PolicyModel.root_policy_id, PolicyModel.id).label("root"),
+                func.max(PolicyModel.version).label("max_version"),
+            )
+            .group_by(func.coalesce(PolicyModel.root_policy_id, PolicyModel.id))
+            .subquery()
+        )
         rows = (
             self.db.query(PolicyModel)
+            .join(
+                subq,
+                (func.coalesce(PolicyModel.root_policy_id, PolicyModel.id) == subq.c.root)
+                & (PolicyModel.version == subq.c.max_version),
+            )
             .order_by(PolicyModel.created_at.desc())
-            .offset(offset)
             .limit(limit)
+            .offset(offset)
+            .all()
+        )
+        return [
+            Policy.model_validate({
+                "id": row.id,
+                "name": row.name,
+                "description": row.description,
+                "policy_hash": row.policy_hash,
+                "rules": row.rules,
+                "version": row.version,
+                "root_policy_id": row.root_policy_id,
+                "created_at": row.created_at,
+            })
+            for row in rows
+        ]
+
+    def list_policy_versions(self, policy_id: str) -> list[Policy]:
+        """Return all versions for the lineage containing policy_id."""
+        row = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
+        if not row:
+            return []
+        root_id = row.root_policy_id or row.id
+        rows = (
+            self.db.query(PolicyModel)
+            .filter(
+                (PolicyModel.root_policy_id == root_id) | (PolicyModel.id == root_id)
+            )
+            .order_by(PolicyModel.version.asc())
             .all()
         )
         return [
@@ -478,10 +518,25 @@ class DatabaseStore:
                 "description": r.description,
                 "policy_hash": r.policy_hash,
                 "rules": r.rules,
+                "version": r.version,
+                "root_policy_id": r.root_policy_id,
                 "created_at": r.created_at,
             })
             for r in rows
         ]
+
+    def get_policy(self, policy_id: str) -> Policy | None:
+        row = self.db.query(PolicyModel).filter(PolicyModel.id == policy_id).first()
+        if not row:
+            return None
+        return Policy.model_validate({
+            "id": row.id,
+            "name": row.name,
+            "description": row.description,
+            "policy_hash": row.policy_hash,
+            "rules": row.rules,
+            "created_at": row.created_at,
+        })
 
     def append_audit(self, audit: AuditRecord) -> None:
         row = AuditRecordModel(
@@ -497,7 +552,6 @@ class DatabaseStore:
             http_method=audit.http_method,
             resource=audit.resource,
             amount_usd=audit.amount_usd,
-            reasoning_trace=audit.reasoning_trace,
             action_hash=audit.action_hash,
             policy_hash=audit.policy_hash,
             proof_id=audit.proof_id,
@@ -555,6 +609,8 @@ class DatabaseStore:
         policy_id: str,
         status: str | None = None,
         created_after: datetime | None = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[AuditRecord]:
         query = self.db.query(AuditRecordModel).filter(AuditRecordModel.policy_id == policy_id)
         if status:
@@ -562,7 +618,13 @@ class DatabaseStore:
         if created_after:
             query = query.filter(AuditRecordModel.created_at >= created_after)
 
-        rows = query.order_by(AuditRecordModel.created_at.desc()).all()
+        rows = (
+            query
+            .order_by(AuditRecordModel.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
         return [
             AuditRecord.model_validate({
                 "id": row.id,
@@ -577,7 +639,6 @@ class DatabaseStore:
                 "http_method": row.http_method,
                 "resource": row.resource,
                 "amount_usd": row.amount_usd,
-                "reasoning_trace": row.reasoning_trace,
                 "action_hash": row.action_hash,
                 "policy_hash": row.policy_hash,
                 "proof_id": row.proof_id,
@@ -589,32 +650,41 @@ class DatabaseStore:
             for row in rows
         ]
 
-    def get_audit_stats(self, policy_id: str, policy: Policy | None = None) -> AuditStatsResponse:
-        rows = self.db.query(AuditRecordModel).filter(AuditRecordModel.policy_id == policy_id).all()
-        total = len(rows)
-        allowed = sum(1 for r in rows if r.status.value == "allowed")
-        blocked = sum(1 for r in rows if r.status.value == "blocked")
-        anchored = sum(1 for r in rows if r.receipt_status.value == "anchored")
-        total_spend = sum((r.amount_usd or 0) for r in rows if r.status.value == "allowed")
-        max_spend = policy.rules.max_spend_usd if policy else None
-        remaining = (max_spend - total_spend) if max_spend is not None else None
-        return AuditStatsResponse(
-            policy_id=policy_id,
-            total_requests=total,
-            allowed_requests=allowed,
-            blocked_requests=blocked,
-            anchored_receipts=anchored,
-            total_spend_usd=round(total_spend, 4),
-            policy_max_spend_usd=max_spend,
-            remaining_credit_usd=round(remaining, 4) if remaining is not None else None,
-        )
+    def count_audits(
+        self,
+        policy_id: str,
+        status: str | None = None,
+        created_after: datetime | None = None,
+    ) -> int:
+        query = self.db.query(AuditRecordModel).filter(AuditRecordModel.policy_id == policy_id)
+        if status:
+            query = query.filter(AuditRecordModel.status == AuditStatusEnum(status))
+        if created_after:
+            query = query.filter(AuditRecordModel.created_at >= created_after)
+        return query.count()
 
     def get_requests_in_last_minute(self, policy_id: str) -> int:
+        """Count only *allowed* requests in the last minute to avoid blocking
+        legitimate callers due to prior policy-blocked attempts."""
         one_minute_ago = datetime.now(timezone.utc) - timedelta(minutes=1)
         return self.db.query(AuditRecordModel).filter(
             AuditRecordModel.policy_id == policy_id,
+            AuditRecordModel.status == AuditStatusEnum.allowed,
             AuditRecordModel.created_at >= one_minute_ago,
         ).count()
+
+    def revoke_account_session(self, session_id: str) -> bool:
+        """Mark a session as revoked. Returns True if found and revoked."""
+        row = (
+            self.db.query(AccountSessionModel)
+            .filter(AccountSessionModel.session_id == session_id)
+            .first()
+        )
+        if not row or row.revoked_at is not None:
+            return False
+        row.revoked_at = datetime.now(timezone.utc)
+        self.db.commit()
+        return True
 
     # ── Agent Identity ─────────────────────────────────────────────────────
 
