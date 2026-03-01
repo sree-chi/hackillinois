@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+# Load .env.local BEFORE any src.* imports so that modules like auth.py
+# can read env vars (API_KEY, APP_ENV, etc.) at import time.
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=".env.local", override=True)
+
 import logging
 import os
 import json
