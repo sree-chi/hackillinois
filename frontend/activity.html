@@ -62,6 +62,41 @@
             margin-top: 6px;
         }
 
+        /* Dropdowns */
+        .gov-select {
+            width: 100%;
+            border: 1px solid rgba(58, 44, 24, 0.14);
+            background: rgba(255, 255, 255, 0.72);
+            color: var(--ink);
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 0.95rem;
+            font-family: 'IBM Plex Mono', monospace;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath fill='%236a5d4b' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            cursor: pointer;
+        }
+
+        .gov-select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .gov-select option {
+            font-family: 'IBM Plex Mono', monospace;
+            padding: 8px;
+        }
+
+        .not-signed-in-hint {
+            font-size: 0.88rem;
+            color: var(--muted);
+            line-height: 1.6;
+            margin-top: 8px;
+        }
+
         /* Budget bar */
         .budget-panel {
             margin-top: 0;
@@ -152,6 +187,55 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
+        }
+
+        /* Wallet spend breakdown inside budget */
+        .wallet-breakdown {
+            display: grid;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .wallet-spend-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.48);
+            border: 1px solid var(--line);
+        }
+
+        .wallet-spend-row .wallet-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .wallet-spend-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .wallet-spend-name {
+            font-weight: 700;
+            font-size: 0.88rem;
+        }
+
+        .wallet-spend-addr {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .wallet-spend-amount {
+            font-weight: 700;
+            font-size: 1rem;
+            white-space: nowrap;
         }
 
         /* Two-column layout */
@@ -276,7 +360,6 @@
             font-weight: 700;
             cursor: pointer;
             font-family: inherit;
-            white-space: nowrap;
         }
 
         .btn-remove:hover {
@@ -368,6 +451,19 @@
 
         .sep {
             opacity: 0.35;
+        }
+
+        .audit-wallet-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(182, 132, 82, 0.1);
+            border: 1px solid rgba(182, 132, 82, 0.18);
+            color: var(--primary-dark);
         }
 
         .audit-trace-block {
@@ -517,7 +613,6 @@
         .ks-dialog h2 {
             font-size: 1.2rem;
             margin-bottom: 8px;
-            letter-spacing: -0.03em;
         }
 
         .ks-dialog p {
@@ -624,27 +719,35 @@
                 </div>
             </section>
 
-            <!-- Config Banner -->
+            <!-- Config: Dropdowns -->
             <section class="panel">
                 <div class="section-heading">
-                    <p class="eyebrow">Access</p>
-                    <h2>Load a policy feed</h2>
+                    <p class="eyebrow">Configuration</p>
+                    <h2>Select API key &amp; policy</h2>
                 </div>
-                <form id="cfg-form" class="stack">
+                <div id="signed-in-config">
                     <div class="grid">
                         <label>
-                            <span>API key</span>
-                            <input id="cfg-api-key" type="text" placeholder="ska_live_…">
+                            <span>API Key</span>
+                            <select id="cfg-api-key-select" class="gov-select">
+                                <option value="">Sign in to load keys…</option>
+                            </select>
                         </label>
                         <label>
-                            <span>Policy ID</span>
-                            <input id="cfg-policy-id" type="text" placeholder="pol_…">
+                            <span>Policy</span>
+                            <select id="cfg-policy-select" class="gov-select">
+                                <option value="">Select an API key first…</option>
+                            </select>
                         </label>
                     </div>
-                    <div class="action-row">
-                        <button id="load-btn" class="btn btn-primary" type="submit">Load Dashboard</button>
+                    <p id="not-signed-in-hint" class="not-signed-in-hint is-hidden">
+                        ⚠️ You need to <a href="/">sign in</a> first. Your API keys and policies will appear here
+                        automatically.
+                    </p>
+                    <div class="action-row" style="margin-top:14px;">
+                        <button id="load-btn" class="btn btn-primary" type="button">Load Dashboard</button>
                     </div>
-                </form>
+                </div>
             </section>
 
             <!-- Stats -->
@@ -676,7 +779,7 @@
                 </div>
             </section>
 
-            <!-- Budget -->
+            <!-- Budget + Wallet Breakdown -->
             <section class="panel budget-panel">
                 <div class="budget-header">
                     <div class="section-heading" style="margin-bottom:0">
@@ -695,15 +798,14 @@
                 </div>
                 <div class="budget-legend">
                     <div class="legend-item">
-                        <div class="legend-dot" style="background:var(--primary)"></div>
-                        Spent by agents
+                        <div class="legend-dot" style="background:var(--primary)"></div> Spent by agents
                     </div>
                     <div class="legend-item">
                         <div class="legend-dot" style="background:rgba(255,255,255,0.56); border:1px solid var(--line)">
-                        </div>
-                        <span id="budget-remaining-label">Remaining</span>
+                        </div> <span id="budget-remaining-label">Remaining</span>
                     </div>
                 </div>
+                <div id="wallet-breakdown" class="wallet-breakdown"></div>
             </section>
 
             <!-- Two-col: Agents + Audit Feed -->
@@ -720,9 +822,9 @@
                     </div>
                     <div class="gov-panel-body">
                         <div class="agent-add-row">
-                            <input type="text" id="new-agent-name" placeholder="Agent name…" />
-                            <input type="text" id="new-agent-wallet" placeholder="Wallet (optional)"
-                                style="max-width:150px;" />
+                            <input type="text" id="new-agent-name" placeholder="Agent name (required)" />
+                            <input type="text" id="new-agent-wallet" placeholder="Wallet address"
+                                style="max-width:170px;" />
                             <button class="btn btn-primary" id="add-agent-btn"
                                 style="padding:10px 16px; font-size:0.88rem;">Add</button>
                         </div>
@@ -762,8 +864,8 @@
     <div id="ks-confirm-overlay">
         <div class="ks-dialog">
             <h2>⚠️ Confirm Kill Switch</h2>
-            <p>This will <strong>suspend all active API keys</strong> for your account, immediately blocking all agent
-                activity. You can restore individual keys from Keys page.</p>
+            <p>This will <strong>suspend all active API keys</strong> for your account. You can restore them from the
+                Keys page.</p>
             <div class="ks-dialog-btns">
                 <button class="btn btn-ghost" id="ks-cancel-btn">Cancel</button>
                 <button class="btn btn-primary" id="ks-confirm-btn" style="background:#bf573f;">Suspend All
@@ -772,9 +874,7 @@
         </div>
     </div>
 
-    <!-- Toasts -->
     <div id="toast-stack"></div>
-
     <script type="module" src="./activity.js"></script>
 </body>
 

@@ -1,10 +1,14 @@
 // ── State ──────────────────────────────────────────────────────────────────
 const STORAGE_KEYS = {
-    apiBase: "sentinel.apiBase",
     apiKey: "sentinel.apiKey",
     policyId: "sentinel.policyId",
     sessionToken: "sentinel.sessionToken",
 };
+
+const WALLET_COLORS = [
+    "var(--primary)", "var(--secondary-dark)", "#5d9c3e", "#bf573f",
+    "#6366f1", "#d97706", "#8b5cf6", "#0891b2",
+];
 
 let STATE = {
     apiBase: resolveApiBase(),
@@ -14,21 +18,23 @@ let STATE = {
     allAudits: [],
     agents: [],
     apiKeys: [],
+    policies: [],
     account: null,
     currentFilter: "all",
 };
 
 function resolveApiBase() {
     const { hostname, origin } = window.location;
-    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
-    return isLocalhost ? "http://localhost:8000" : `${origin}/server`;
+    return (hostname === "localhost" || hostname === "127.0.0.1")
+        ? "http://localhost:8000"
+        : `${origin}/server`;
 }
 
-// ── DOM refs ───────────────────────────────────────────────────────────────
-const cfgApiKey = document.getElementById("cfg-api-key");
-const cfgPolicyId = document.getElementById("cfg-policy-id");
-const cfgForm = document.getElementById("cfg-form");
+// ── DOM ────────────────────────────────────────────────────────────────────
+const apiKeySelect = document.getElementById("cfg-api-key-select");
+const policySelect = document.getElementById("cfg-policy-select");
 const loadBtn = document.getElementById("load-btn");
+const notSignedHint = document.getElementById("not-signed-in-hint");
 const killSwitchBtn = document.getElementById("kill-switch-btn");
 const ksOverlay = document.getElementById("ks-confirm-overlay");
 const ksCancelBtn = document.getElementById("ks-cancel-btn");
@@ -47,6 +53,7 @@ const budgetSpent = document.getElementById("budget-spent");
 const budgetLimit = document.getElementById("budget-limit");
 const budgetSub = document.getElementById("budget-sub");
 const budgetRemLabel = document.getElementById("budget-remaining-label");
+const walletBreakdown = document.getElementById("wallet-breakdown");
 
 const agentList = document.getElementById("agent-list");
 const agentCount = document.getElementById("agent-count");
@@ -58,19 +65,14 @@ const auditFeed = document.getElementById("audit-feed");
 const auditCount = document.getElementById("audit-count");
 
 // ── Utilities ──────────────────────────────────────────────────────────────
-function esc(val) {
-    return String(val ?? "")
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function esc(v) {
+    return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 async function apiFetch(path, opts = {}) {
-    const url = `${STATE.apiBase}${path}`;
-    const res = await fetch(url, opts);
+    const res = await fetch(`${STATE.apiBase}${path}`, opts);
     const ct = res.headers.get("content-type") || "";
-    const body = ct.includes("application/json")
-        ? await res.json()
-        : { message: await res.text() };
+    const body = ct.includes("application/json") ? await res.json() : { message: await res.text() };
     if (!res.ok) {
         const msg = body?.detail?.error?.message || body?.detail || body?.message || JSON.stringify(body);
         throw Object.assign(new Error(msg), { status: res.status });
@@ -89,39 +91,133 @@ function toast(msg, type = "info") {
     setTimeout(() => el.remove(), 3800);
 }
 
-function fmt(val, dec = 0) {
-    if (val === null || val === undefined) return "—";
-    return Number(val).toLocaleString("en-US", { maximumFractionDigits: dec });
+function fmt(v, d = 0) {
+    if (v == null) return "—";
+    return Number(v).toLocaleString("en-US", { maximumFractionDigits: d });
 }
 
-function fmtUSD(val) {
-    if (val === null || val === undefined) return "—";
-    return `$${Number(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtUSD(v) {
+    if (v == null) return "—";
+    return `$${Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function timeAgo(isoStr) {
-    if (!isoStr) return "—";
-    const diff = Date.now() - new Date(isoStr).getTime();
-    const s = Math.floor(diff / 1000);
+function timeAgo(iso) {
+    if (!iso) return "—";
+    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
     if (s < 60) return `${s}s ago`;
     if (s < 3600) return `${Math.floor(s / 60)}m ago`;
     if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-    return new Date(isoStr).toLocaleDateString();
+    return new Date(iso).toLocaleDateString();
+}
+
+// ── Wallet name resolution ─────────────────────────────────────────────────
+function walletDisplayName(walletAddr) {
+    if (!walletAddr) return null;
+    // Check agents first
+    const agent = STATE.agents.find(a => a.wallet_address === walletAddr);
+    if (agent) return agent.name;
+    // Shorten address
+    return walletAddr.substring(0, 6) + "…" + walletAddr.substring(walletAddr.length - 4);
+}
+
+function walletColor(walletAddr) {
+    if (!walletAddr) return WALLET_COLORS[0];
+    // Deterministic color based on wallet hash
+    let hash = 0;
+    for (let i = 0; i < walletAddr.length; i++) hash = ((hash << 5) - hash + walletAddr.charCodeAt(i)) | 0;
+    return WALLET_COLORS[Math.abs(hash) % WALLET_COLORS.length];
 }
 
 // ── Account / Session ──────────────────────────────────────────────────────
 async function loadAccountInfo() {
-    if (!STATE.sessionToken) return;
+    if (!STATE.sessionToken) {
+        notSignedHint.classList.remove("is-hidden");
+        return;
+    }
+    notSignedHint.classList.add("is-hidden");
     try {
         const data = await apiFetch("/v1/accounts/me/dashboard", {
             headers: { Authorization: `Bearer ${STATE.sessionToken}` },
         });
         STATE.account = data.account;
-        STATE.apiKeys = data.api_keys || [];
+        STATE.apiKeys = (data.api_keys || []).filter(k => !k.revoked_at);
         accountChip.textContent = `${STATE.account.email}${STATE.account.full_name ? ' | ' + STATE.account.full_name : ''}`;
-        const hasActive = STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
-        killSwitchBtn.disabled = !hasActive;
-    } catch { /* session expired or no session */ }
+        killSwitchBtn.disabled = !STATE.apiKeys.some(k => !k.suspended_at);
+
+        // Populate API key dropdown
+        populateApiKeyDropdown();
+    } catch {
+        notSignedHint.classList.remove("is-hidden");
+    }
+}
+
+function populateApiKeyDropdown() {
+    const activeKeys = STATE.apiKeys.filter(k => !k.suspended_at);
+    if (!activeKeys.length) {
+        apiKeySelect.innerHTML = `<option value="">No active keys found</option>`;
+        return;
+    }
+    apiKeySelect.innerHTML = `<option value="">Choose an API key…</option>` +
+        activeKeys.map(k =>
+            `<option value="${esc(k.api_key_prefix)}" ${STATE.apiKey.startsWith(k.api_key_prefix.replace('…', '')) ? 'selected' : ''}>
+                ${esc(k.app_name)} — ${esc(k.api_key_prefix)}
+            </option>`
+        ).join("");
+
+    // If user already has a key stored and it matches a prefix, auto-select
+    if (STATE.apiKey) {
+        const match = activeKeys.find(k => STATE.apiKey.startsWith(k.api_key_prefix.replace('…', '')));
+        if (match) {
+            // The full key is stored in localStorage; set it as selected
+            for (const opt of apiKeySelect.options) {
+                if (opt.value === match.api_key_prefix) { opt.selected = true; break; }
+            }
+        }
+    }
+}
+
+// When API key is selected, fetch policies for that key
+apiKeySelect.addEventListener("change", async () => {
+    const prefix = apiKeySelect.value;
+    if (!prefix) {
+        policySelect.innerHTML = `<option value="">Select an API key first…</option>`;
+        return;
+    }
+
+    // We need the FULL api key. If user has it stored and prefix matches, use it.
+    // Otherwise, the prefix alone won't work — we need the full key.
+    if (STATE.apiKey && STATE.apiKey.startsWith(prefix.replace('…', ''))) {
+        // Great, stored key matches this prefix
+    } else {
+        // User doesn't have the full key stored for this selection.
+        // Show a notice asking them to paste the full key.
+        policySelect.innerHTML = `<option value="">Paste full API key on Keys page first</option>`;
+        toast("The full API key must be stored. Copy it from the Keys page.", "info");
+        return;
+    }
+
+    await loadPolicies();
+});
+
+async function loadPolicies() {
+    policySelect.innerHTML = `<option value="">Loading policies…</option>`;
+    try {
+        const data = await apiFetch("/v1/policies", { headers: apiHeaders() });
+        STATE.policies = data.data || [];
+        if (!STATE.policies.length) {
+            policySelect.innerHTML = `<option value="">No policies found. Create one on the Keys page.</option>`;
+            return;
+        }
+        policySelect.innerHTML = `<option value="">Choose a policy…</option>` +
+            STATE.policies.map(p =>
+                `<option value="${esc(p.id)}" ${p.id === STATE.policyId ? 'selected' : ''}>
+                    ${esc(p.name)} — ${esc(p.id)}
+                </option>`
+            ).join("");
+    } catch (err) {
+        policySelect.innerHTML = `<option value="">Failed to load policies</option>`;
+        toast(`Policies: ${err.message}`, "error");
+    }
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────────
@@ -137,7 +233,7 @@ async function loadStats() {
     const max = data.policy_max_spend_usd;
     budgetSpent.textContent = fmtUSD(spent);
 
-    if (max !== null && max !== undefined) {
+    if (max != null) {
         const pct = Math.min(100, (spent / max) * 100);
         budgetLimit.textContent = `/ ${fmtUSD(max)} limit`;
         budgetBar.style.width = `${pct}%`;
@@ -150,6 +246,42 @@ async function loadStats() {
         budgetSub.textContent = "This policy has no maximum spend limit configured.";
         budgetRemLabel.textContent = "Unlimited";
     }
+}
+
+// ── Wallet Breakdown ───────────────────────────────────────────────────────
+function renderWalletBreakdown() {
+    // Group spend by agent_wallet from allowed audits
+    const walletSpend = {};
+    for (const a of STATE.allAudits) {
+        if (a.status !== "allowed" || a.amount_usd == null) continue;
+        const w = a.agent_wallet || "Unknown Wallet";
+        walletSpend[w] = (walletSpend[w] || 0) + a.amount_usd;
+    }
+
+    const entries = Object.entries(walletSpend).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) {
+        walletBreakdown.innerHTML = "";
+        return;
+    }
+
+    walletBreakdown.innerHTML = `
+        <div class="section-heading" style="margin-bottom:4px;margin-top:6px;">
+            <p class="eyebrow" style="margin-bottom:0;">Spend by Wallet</p>
+        </div>` +
+        entries.map(([wallet, total]) => {
+            const name = walletDisplayName(wallet) || wallet;
+            const color = walletColor(wallet);
+            const isUnknown = wallet === "Unknown Wallet";
+            return `
+            <div class="wallet-spend-row">
+                <div class="wallet-dot" style="background:${color}"></div>
+                <div class="wallet-spend-info">
+                    <div class="wallet-spend-name">${esc(name)}</div>
+                    ${!isUnknown ? `<div class="wallet-spend-addr">${esc(wallet)}</div>` : ""}
+                </div>
+                <div class="wallet-spend-amount">${fmtUSD(total)}</div>
+            </div>`;
+        }).join("");
 }
 
 // ── Agents ─────────────────────────────────────────────────────────────────
@@ -166,18 +298,16 @@ async function loadAgents() {
 function agentIsActive(agent) {
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
     return STATE.allAudits.some(a => {
-        const matchWallet = agent.wallet_address && a.agent_wallet === agent.wallet_address;
-        const matchName = a.requester?.toLowerCase().includes(
-            agent.name.toLowerCase().replace(/\s+/g, "_")
-        );
-        return (matchWallet || matchName) && new Date(a.created_at).getTime() > fiveMinAgo;
+        const m1 = agent.wallet_address && a.agent_wallet === agent.wallet_address;
+        const m2 = a.requester?.toLowerCase().includes(agent.name.toLowerCase().replace(/\s+/g, "_"));
+        return (m1 || m2) && new Date(a.created_at).getTime() > fiveMinAgo;
     });
 }
 
 function renderAgents() {
     agentCount.textContent = `${STATE.agents.length} registered`;
     if (!STATE.agents.length) {
-        agentList.innerHTML = `<div class="empty-state">No agents registered yet. Add one above to link a wallet to a named identity.</div>`;
+        agentList.innerHTML = `<div class="empty-state">No agents registered yet. Add one above.</div>`;
         return;
     }
     agentList.innerHTML = STATE.agents.map(a => {
@@ -198,6 +328,7 @@ addAgentBtn.addEventListener("click", async () => {
     const name = newAgentName.value.trim();
     const wallet = newAgentWallet.value.trim() || null;
     if (!name) { toast("Agent name is required.", "error"); return; }
+    if (!wallet) { toast("Wallet address is required to track spending.", "error"); return; }
     if (!STATE.sessionToken) { toast("Sign in to register agents.", "error"); return; }
     addAgentBtn.disabled = true;
     try {
@@ -209,6 +340,8 @@ addAgentBtn.addEventListener("click", async () => {
         newAgentName.value = "";
         newAgentWallet.value = "";
         await loadAgents();
+        renderWalletBreakdown(); // Re-render with new names
+        renderAuditFeed();       // Re-render wallet tags
         toast(`Agent "${name}" registered.`, "success");
     } catch (err) { toast(`Failed: ${err.message}`, "error"); }
     finally { addAgentBtn.disabled = false; }
@@ -222,10 +355,7 @@ agentList.addEventListener("click", async (e) => {
         await apiFetch(`/v1/agents/${btn.dataset.deleteAgent}`, { method: "DELETE", headers: sessionHeaders() });
         await loadAgents();
         toast("Agent removed.", "info");
-    } catch (err) {
-        btn.disabled = false;
-        toast(`Failed: ${err.message}`, "error");
-    }
+    } catch (err) { btn.disabled = false; toast(`Failed: ${err.message}`, "error"); }
 });
 
 // ── Audit Feed ─────────────────────────────────────────────────────────────
@@ -236,60 +366,59 @@ async function loadAudits() {
     renderAuditFeed();
 }
 
-function verifyBadge(audit) {
-    if (!audit.receipt_signature) return `<span class="verify-check fail">✗ No receipt</span>`;
-    if (audit.receipt_signature.startsWith("mock_")) return `<span class="verify-check mock">⬡ Mock</span>`;
+function verifyBadge(a) {
+    if (!a.receipt_signature) return `<span class="verify-check fail">✗ No receipt</span>`;
+    if (a.receipt_signature.startsWith("mock_")) return `<span class="verify-check mock">⬡ Mock</span>`;
     return `<span class="verify-check ok">✓ Verified</span>`;
 }
 
-function renderAuditCard(audit) {
-    const isAllowed = audit.status === "allowed";
-    const statusClass = isAllowed ? "status-success" : "status-danger";
-    const receiptClass = audit.receipt_status === "anchored" ? "status-success" : "status-warning";
+function renderAuditCard(a) {
+    const ok = a.status === "allowed";
+    const rcptClass = a.receipt_status === "anchored" ? "status-success" : "status-warning";
+    const walletName = walletDisplayName(a.agent_wallet);
+    const walletTag = a.agent_wallet
+        ? `<span class="audit-wallet-tag" style="border-color:${walletColor(a.agent_wallet)}33;background:${walletColor(a.agent_wallet)}18;">
+               <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${walletColor(a.agent_wallet)}"></span>
+               ${esc(walletName || a.agent_wallet.substring(0, 8) + '…')}
+           </span>`
+        : "";
 
-    const traceHtml = audit.reasoning_trace
-        ? `<div class="audit-trace-block">💬 ${esc(audit.reasoning_trace)}</div>` : "";
+    const traceHtml = a.reasoning_trace
+        ? `<div class="audit-trace-block">💬 ${esc(a.reasoning_trace)}</div>` : "";
+    const violationHtml = a.violation?.explanation
+        ? `<div class="audit-violation-block">⛔ ${esc(a.violation.explanation)}</div>` : "";
+    const solanaLink = a.explorer_url
+        ? `<a class="solana-link" href="${esc(a.explorer_url)}" target="_blank" rel="noreferrer">🔗 View on Solana Explorer ↗</a>` : "";
 
-    const violationHtml = audit.violation?.explanation
-        ? `<div class="audit-violation-block">⛔ ${esc(audit.violation.explanation)}</div>` : "";
-
-    const solanaLink = audit.explorer_url
-        ? `<a class="solana-link" href="${esc(audit.explorer_url)}" target="_blank" rel="noreferrer">🔗 View on Solana Explorer ↗</a>` : "";
-
-    const sigShort = audit.receipt_signature ? audit.receipt_signature.substring(0, 22) + "…" : "None";
-    const hashShort = audit.action_hash ? audit.action_hash.substring(0, 16) + "…" : "None";
+    const sigShort = a.receipt_signature ? a.receipt_signature.substring(0, 22) + "…" : "None";
+    const hashShort = a.action_hash ? a.action_hash.substring(0, 16) + "…" : "None";
 
     return `
-    <div class="audit-card ${isAllowed ? "allowed" : "blocked"}">
+    <div class="audit-card ${ok ? "allowed" : "blocked"}">
         <div class="audit-top">
             <div class="audit-action-label">
-                ${esc(audit.action_type)}<span>${esc(audit.http_method)} ${esc(audit.resource)}</span>
+                ${esc(a.action_type)}<span>${esc(a.http_method)} ${esc(a.resource)}</span>
             </div>
             <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-                ${verifyBadge(audit)}
-                <span class="status-pill ${statusClass}">${esc(audit.status)}</span>
+                ${verifyBadge(a)}
+                <span class="status-pill ${ok ? "status-success" : "status-danger"}">${esc(a.status)}</span>
             </div>
         </div>
         <div class="audit-meta-row">
-            <span>${esc(audit.requester)}</span>
+            ${walletTag}
+            <span>${esc(a.requester)}</span>
             <span class="sep">·</span>
-            <span>${timeAgo(audit.created_at)}</span>
-            ${audit.amount_usd != null ? `<span class="sep">·</span><span>${fmtUSD(audit.amount_usd)}</span>` : ""}
+            <span>${timeAgo(a.created_at)}</span>
+            ${a.amount_usd != null ? `<span class="sep">·</span><span>${fmtUSD(a.amount_usd)}</span>` : ""}
             <span class="sep">·</span>
-            <span class="status-pill ${receiptClass}" style="padding:4px 10px; font-size:0.72rem;">${esc(audit.receipt_status)}</span>
+            <span class="status-pill ${rcptClass}" style="padding:4px 10px;font-size:0.72rem">${esc(a.receipt_status)}</span>
         </div>
         ${traceHtml}${violationHtml}
         <div class="audit-detail-grid">
-            <div class="audit-kv">
-                <span class="audit-kv-label">Action Hash</span>
-                <span class="audit-kv-value" title="${esc(audit.action_hash || "")}">${esc(hashShort)}</span>
-            </div>
-            <div class="audit-kv">
-                <span class="audit-kv-label">Solana Sig</span>
-                <span class="audit-kv-value" title="${esc(audit.receipt_signature || "")}">${esc(sigShort)}</span>
-            </div>
-            ${audit.agent_wallet ? `<div class="audit-kv"><span class="audit-kv-label">Agent Wallet</span><span class="audit-kv-value">${esc(audit.agent_wallet.substring(0, 16))}…</span></div>` : ""}
-            ${audit.proof_id ? `<div class="audit-kv"><span class="audit-kv-label">Proof ID</span><span class="audit-kv-value">${esc(audit.proof_id)}</span></div>` : ""}
+            <div class="audit-kv"><span class="audit-kv-label">Action Hash</span><span class="audit-kv-value" title="${esc(a.action_hash || "")}">${esc(hashShort)}</span></div>
+            <div class="audit-kv"><span class="audit-kv-label">Solana Sig</span><span class="audit-kv-value" title="${esc(a.receipt_signature || "")}">${esc(sigShort)}</span></div>
+            ${a.agent_wallet ? `<div class="audit-kv"><span class="audit-kv-label">Agent Wallet</span><span class="audit-kv-value">${esc(a.agent_wallet)}</span></div>` : ""}
+            ${a.proof_id ? `<div class="audit-kv"><span class="audit-kv-label">Proof ID</span><span class="audit-kv-value">${esc(a.proof_id)}</span></div>` : ""}
         </div>
         ${solanaLink}
     </div>`;
@@ -324,19 +453,17 @@ ksOverlay.addEventListener("click", e => { if (e.target === ksOverlay) ksOverlay
 ksConfirmBtn.addEventListener("click", async () => {
     ksOverlay.classList.remove("open");
     ksConfirmBtn.disabled = true;
-    const activeKeys = STATE.apiKeys.filter(k => !k.revoked_at && !k.suspended_at);
-    let suspended = 0, failed = 0;
-    for (const key of activeKeys) {
+    const active = STATE.apiKeys.filter(k => !k.revoked_at && !k.suspended_at);
+    let ok = 0, fail = 0;
+    for (const k of active) {
         try {
-            await apiFetch(`/v1/accounts/me/keys/${key.client_id}/suspend`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${STATE.sessionToken}` },
+            await apiFetch(`/v1/accounts/me/keys/${k.client_id}/suspend`, {
+                method: "POST", headers: { Authorization: `Bearer ${STATE.sessionToken}` },
             });
-            suspended++;
-        } catch { failed++; }
+            ok++;
+        } catch { fail++; }
     }
-    toast(`Kill switch: ${suspended} key${suspended !== 1 ? "s" : ""} suspended${failed ? `, ${failed} failed` : ""}.`,
-        failed ? "error" : "success");
+    toast(`Kill switch: ${ok} key${ok !== 1 ? "s" : ""} suspended${fail ? `, ${fail} failed` : ""}.`, fail ? "error" : "success");
     killSwitchBtn.disabled = true;
     ksConfirmBtn.disabled = false;
     await loadAccountInfo();
@@ -344,13 +471,11 @@ ksConfirmBtn.addEventListener("click", async () => {
 
 // ── Load All ───────────────────────────────────────────────────────────────
 async function loadDashboard() {
-    const apiKey = cfgApiKey.value.trim();
-    const policyId = cfgPolicyId.value.trim();
-    if (!apiKey || !policyId) { toast("API key and Policy ID are both required.", "error"); return; }
+    const policyId = policySelect.value;
+    if (!STATE.apiKey) { toast("Select an API key.", "error"); return; }
+    if (!policyId) { toast("Select a policy.", "error"); return; }
 
-    STATE.apiKey = apiKey;
     STATE.policyId = policyId;
-    localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
     localStorage.setItem(STORAGE_KEYS.policyId, policyId);
 
     loadBtn.disabled = true;
@@ -358,6 +483,7 @@ async function loadDashboard() {
     try {
         await Promise.all([loadStats(), loadAudits()]);
         await loadAgents();
+        renderWalletBreakdown();
         toast("Dashboard loaded.", "success");
     } catch (err) {
         toast(`Load failed: ${err.message}`, "error");
@@ -367,15 +493,19 @@ async function loadDashboard() {
     }
 }
 
-cfgForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    loadDashboard();
-});
+loadBtn.addEventListener("click", loadDashboard);
 
 // ── Init ───────────────────────────────────────────────────────────────────
 (async function init() {
-    cfgApiKey.value = STATE.apiKey;
-    cfgPolicyId.value = STATE.policyId;
     await loadAccountInfo();
-    if (STATE.apiKey && STATE.policyId) loadDashboard();
+
+    // If we have a stored key, auto-trigger policy load
+    if (STATE.apiKey && STATE.apiKeys.length) {
+        await loadPolicies();
+        // If policy is also stored, auto-load
+        if (STATE.policyId && policySelect.querySelector(`option[value="${STATE.policyId}"]`)) {
+            policySelect.value = STATE.policyId;
+            loadDashboard();
+        }
+    }
 })();
