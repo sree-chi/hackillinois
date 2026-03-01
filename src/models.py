@@ -120,6 +120,8 @@ class IssueApiKeyRequest(BaseModel):
     app_name: str = Field(min_length=1, max_length=100)
     owner_name: str | None = Field(default=None, max_length=100)
     use_case: str | None = Field(default=None, max_length=500)
+    wallet_address: str | None = Field(default=None, max_length=120)
+    wallet_label: str | None = Field(default=None, max_length=100)
 
 
 class RegisterAccountRequest(BaseModel):
@@ -292,6 +294,8 @@ class ApiClientRecord(BaseModel):
     owner_email: str
     use_case: str | None = None
     api_key_prefix: str
+    wallet_address: str | None = None
+    wallet_label: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     last_used_at: datetime | None = None
     suspended_at: datetime | None = None
@@ -304,6 +308,8 @@ class IssueApiKeyResponse(BaseModel):
     owner_email: str
     api_key: str
     api_key_prefix: str
+    wallet_address: str | None = None
+    wallet_label: str | None = None
     created_at: datetime
     base_url: str
     docs_url: str
@@ -411,6 +417,8 @@ class AccountApiKeySummary(BaseModel):
     app_name: str
     owner_email: str
     api_key_prefix: str
+    wallet_address: str | None = None
+    wallet_label: str | None = None
     created_at: datetime
     last_used_at: datetime | None = None
     suspended_at: datetime | None = None

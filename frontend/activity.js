@@ -143,9 +143,82 @@ async function loadAccountInfo() {
         STATE.account = data.account;
         STATE.apiKeys = data.api_keys || [];
         accountChip.textContent = `${STATE.account.email}${STATE.account.full_name ? ' | ' + STATE.account.full_name : ''}`;
-        const hasActive = STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
-        killSwitchBtn.disabled = !hasActive;
-    } catch { /* session expired or no session */ }
+        killSwitchBtn.disabled = !STATE.apiKeys.some(k => !k.revoked_at && !k.suspended_at);
+
+        // Populate API key dropdown
+        populateApiKeyDropdown();
+    } catch {
+        notSignedHint.classList.remove("is-hidden");
+    }
+}
+
+function populateApiKeyDropdown() {
+    const activeKeys = STATE.apiKeys.filter(k => !k.revoked_at && !k.suspended_at);
+    if (!activeKeys.length) {
+        apiKeySelect.innerHTML = `<option value="">No active keys found</option>`;
+        return;
+    }
+    apiKeySelect.innerHTML = `<option value="">Choose an API key…</option>` +
+        activeKeys.map(k =>
+            `<option value="${esc(k.api_key_prefix)}" ${STATE.apiKey.startsWith(k.api_key_prefix.replace('…', '')) ? 'selected' : ''}>
+                ${esc(k.app_name)}${k.wallet_label ? ' \ud83d\udd17 ' + esc(k.wallet_label) : ''} — ${esc(k.api_key_prefix)}
+            </option>`
+        ).join("");
+
+    // If user already has a key stored and it matches a prefix, auto-select
+    if (STATE.apiKey) {
+        const match = activeKeys.find(k => STATE.apiKey.startsWith(k.api_key_prefix.replace('…', '')));
+        if (match) {
+            // The full key is stored in localStorage; set it as selected
+            for (const opt of apiKeySelect.options) {
+                if (opt.value === match.api_key_prefix) { opt.selected = true; break; }
+            }
+        }
+    }
+}
+
+// When API key is selected, fetch policies for that key
+apiKeySelect.addEventListener("change", async () => {
+    const prefix = apiKeySelect.value;
+    if (!prefix) {
+        policySelect.innerHTML = `<option value="">Select an API key first…</option>`;
+        return;
+    }
+
+    // We need the FULL api key. If user has it stored and prefix matches, use it.
+    // Otherwise, the prefix alone won't work — we need the full key.
+    if (STATE.apiKey && STATE.apiKey.startsWith(prefix.replace('…', ''))) {
+        // Great, stored key matches this prefix
+    } else {
+        // User doesn't have the full key stored for this selection.
+        // Show a notice asking them to paste the full key.
+        policySelect.innerHTML = `<option value="">Paste full API key on Keys page first</option>`;
+        toast("The full API key must be stored. Copy it from the Keys page.", "info");
+        return;
+    }
+
+    await loadPolicies();
+});
+
+async function loadPolicies() {
+    policySelect.innerHTML = `<option value="">Loading policies…</option>`;
+    try {
+        const data = await apiFetch("/v1/policies", { headers: apiHeaders() });
+        STATE.policies = data.data || [];
+        if (!STATE.policies.length) {
+            policySelect.innerHTML = `<option value="">No policies found. Create one on the Keys page.</option>`;
+            return;
+        }
+        policySelect.innerHTML = `<option value="">Choose a policy…</option>` +
+            STATE.policies.map(p =>
+                `<option value="${esc(p.id)}" ${p.id === STATE.policyId ? 'selected' : ''}>
+                    ${esc(p.name)} — ${esc(p.id)}
+                </option>`
+            ).join("");
+    } catch (err) {
+        policySelect.innerHTML = `<option value="">Failed to load policies</option>`;
+        toast(`Policies: ${err.message}`, "error");
+    }
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────────

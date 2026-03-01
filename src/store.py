@@ -298,6 +298,8 @@ class DatabaseStore:
             use_case=client.use_case,
             api_key_hash=api_key_hash,
             api_key_prefix=client.api_key_prefix,
+            wallet_address=payload.wallet_address,
+            wallet_label=payload.wallet_label,
             created_at=client.created_at,
         )
         self.db.add(row)
@@ -329,6 +331,8 @@ class DatabaseStore:
                 app_name=row.app_name,
                 owner_email=row.owner_email,
                 api_key_prefix=row.api_key_prefix,
+                wallet_address=row.wallet_address,
+                wallet_label=row.wallet_label,
                 created_at=row.created_at,
                 last_used_at=row.last_used_at,
                 suspended_at=row.suspended_at,

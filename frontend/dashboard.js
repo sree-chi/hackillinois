@@ -279,8 +279,9 @@ function renderApiKeys(apiKeys) {
         <article class="activity-card activity-success">
             <div class="activity-header">
                 <div class="activity-copy">
-                    <p class="activity-title">${entry.app_name}</p>
+                    <p class="activity-title">${entry.app_name}${entry.wallet_label ? ` <span style="font-size:0.82rem;color:var(--primary-dark);font-weight:600">🔗 ${entry.wallet_label}</span>` : ""}</p>
                     <p class="activity-meta">${entry.owner_email} | Created ${new Date(entry.created_at).toLocaleString()}</p>
+                    ${entry.wallet_address ? `<p class="activity-meta" style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;">Wallet: ${entry.wallet_address}</p>` : ""}
                 </div>
                 <div class="action-row action-row-wrap">
                     <span class="status-pill ${entry.suspended_at ? "status-warning" : "status-success"}">
@@ -544,6 +545,8 @@ issueKeyForm.addEventListener("submit", async (event) => {
                 app_name: document.getElementById("app-name").value.trim(),
                 owner_name: document.getElementById("owner-name").value.trim() || null,
                 use_case: document.getElementById("use-case").value.trim() || null,
+                wallet_label: document.getElementById("wallet-label").value.trim() || null,
+                wallet_address: document.getElementById("wallet-address").value.trim() || null,
             }),
         });
         const data = await readApiResponse(response);

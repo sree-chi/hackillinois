@@ -98,6 +98,8 @@ class ApiClientModel(Base):
     use_case = Column(String(500), nullable=True)
     api_key_hash = Column(String(64), nullable=False, unique=True, index=True)
     api_key_prefix = Column(String(24), nullable=False, unique=True, index=True)
+    wallet_address = Column(String(120), nullable=True, index=True)
+    wallet_label = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     suspended_at = Column(DateTime(timezone=True), nullable=True)

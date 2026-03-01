@@ -12,6 +12,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from src.auth import (
     api_key_prefix,
+    extract_api_key,
     generate_api_key,
     generate_phone_verification_code,
     generate_session_token,
@@ -157,6 +158,16 @@ def ensure_runtime_schema_compatibility() -> None:
                 statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP WITH TIME ZONE")
             else:
                 statements.append("ALTER TABLE api_clients ADD COLUMN suspended_at DATETIME")
+        if "wallet_address" not in api_client_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS wallet_address VARCHAR(120)")
+            else:
+                statements.append("ALTER TABLE api_clients ADD COLUMN wallet_address VARCHAR(120)")
+        if "wallet_label" not in api_client_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS wallet_label VARCHAR(100)")
+            else:
+                statements.append("ALTER TABLE api_clients ADD COLUMN wallet_label VARCHAR(100)")
 
     if "accounts" in table_names:
         account_columns = {column["name"] for column in inspector.get_columns("accounts")}
@@ -639,6 +650,8 @@ def issue_developer_key(
         owner_email=account.email,
         api_key=key,
         api_key_prefix=client.api_key_prefix,
+        wallet_address=payload.wallet_address,
+        wallet_label=payload.wallet_label,
         created_at=client.created_at,
         base_url=base_url,
         docs_url=f"{base_url}/docs",
@@ -857,6 +870,7 @@ def list_policy_versions(policy_id: str, db: Session = Depends(get_db)):
 @app.post("/v1/authorize", dependencies=[Depends(verify_api_key)])
 def authorize(
     payload: AuthorizeRequest,
+    request: Request,
     response: Response,
     x_solana_tx_signature: str | None = Header(default=None, alias="x-solana-tx-signature"),
     db: Session = Depends(get_db),
@@ -865,6 +879,17 @@ def authorize(
         f"Authorization request — policy: {payload.policy_id}, action: {payload.action.type}"
     )
     store = DatabaseStore(db)
+
+    # ── Auto-fill agent_wallet from the API key's linked wallet ──────
+    if not payload.agent_wallet:
+        raw_key = extract_api_key(
+            request.headers.get("authorization"),
+            request.headers.get("x-api-key"),
+        )
+        if raw_key:
+            client = store.get_api_client_by_hash(hash_api_key(raw_key))
+            if client and client.wallet_address:
+                payload.agent_wallet = client.wallet_address
 
     # Resolve: accept either a specific version id or a root id
     policy = store.get_policy(payload.policy_id)
