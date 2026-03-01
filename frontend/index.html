@@ -14,26 +14,10 @@
         <canvas id="gravity-canvas" class="gravity-canvas" aria-hidden="true"></canvas>
 
         <main class="login-layout">
-            <nav class="topbar topbar-login panel">
-                <a class="brand-link" href="/">Sentinel Auth</a>
-                <div class="topbar-links">
-                    <a class="topbar-link topbar-link-active" href="/">Login</a>
-                    <a class="topbar-link" href="/dashboard.html">Dashboard</a>
-                    <a class="topbar-link" href="/activity.html">Activity Feed</a>
-                    <a class="topbar-link" href="/agent.html">Agent Demo</a>
-                </div>
-            </nav>
-
-            <section class="login-hero panel">
-                <p class="eyebrow">Antigravity Entry</p>
-                <h1>Let the interface pull you into the Sentinel dashboard.</h1>
-                <p class="hero-copy">
-                    Move your cursor and the field reacts. Click the login button and the particles collapse into it,
-                    then the account prompt opens so you can sign in or create an account.
-                </p>
-                <div class="login-actions">
-                    <button id="launch-login-button" class="btn btn-primary btn-launch" type="button">Login to Sentinel</button>
-                    <p class="login-hint">The particle field follows your cursor, then rushes into the button on click.</p>
+            <section class="login-minimal">
+                <div class="login-actions login-actions-row">
+                    <button id="launch-register-button" class="btn btn-secondary btn-launch" type="button">Sign Up</button>
+                    <button id="launch-login-button" class="btn btn-primary btn-launch" type="button">Login</button>
                 </div>
             </section>
         </main>

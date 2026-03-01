@@ -9,6 +9,7 @@ const PARTICLE_COUNT = 170;
 const canvas = document.getElementById("gravity-canvas");
 const ctx = canvas.getContext("2d");
 const launchLoginButton = document.getElementById("launch-login-button");
+const launchRegisterButton = document.getElementById("launch-register-button");
 const authOverlay = document.getElementById("auth-overlay");
 const authStatus = document.getElementById("auth-status");
 const closeAuthButton = document.getElementById("close-auth-button");
@@ -25,6 +26,7 @@ let canvasWidth = 0;
 let canvasHeight = 0;
 let rushMode = false;
 let rushTarget = null;
+let activeLaunchButton = null;
 
 function resolveApiBase() {
     const { hostname, origin } = window.location;
@@ -58,12 +60,15 @@ function seedParticles() {
     particles.length = 0;
     for (let index = 0; index < PARTICLE_COUNT; index += 1) {
         particles.push({
+            anchorX: Math.random() * canvasWidth,
+            anchorY: Math.random() * canvasHeight,
             x: Math.random() * canvasWidth,
             y: Math.random() * canvasHeight,
-            vx: (Math.random() - 0.5) * 0.6,
-            vy: (Math.random() - 0.5) * 0.6,
-            size: 1.2 + Math.random() * 2.3,
-            hue: 24 + Math.random() * 150,
+            vx: 0,
+            vy: 0,
+            size: 3 + Math.random() * 8,
+            depth: 0.35 + Math.random() * 1.4,
+            alpha: 0.2 + Math.random() * 0.35,
         });
     }
 }
@@ -75,42 +80,49 @@ function animateParticles() {
         if (rushMode && rushTarget) {
             const dx = rushTarget.x - particle.x;
             const dy = rushTarget.y - particle.y;
-            particle.vx += dx * 0.0105;
-            particle.vy += dy * 0.0105;
-            particle.vx *= 0.86;
-            particle.vy *= 0.86;
+            particle.vx += dx * 0.016;
+            particle.vy += dy * 0.016;
+            particle.vx *= 0.84;
+            particle.vy *= 0.84;
         } else {
-            const driftX = Math.sin((particle.y + performance.now() * 0.02) * 0.003) * 0.015;
-            const driftY = Math.cos((particle.x + performance.now() * 0.02) * 0.003) * 0.015;
-            particle.vx += driftX;
-            particle.vy += driftY;
+            const offsetX = pointer.active ? (pointer.x - canvasWidth / 2) * 0.055 * particle.depth : 0;
+            const offsetY = pointer.active ? (pointer.y - canvasHeight / 2) * 0.055 * particle.depth : 0;
+            const targetX = particle.anchorX + offsetX;
+            const targetY = particle.anchorY + offsetY;
 
-            if (pointer.active) {
-                const dx = pointer.x - particle.x;
-                const dy = pointer.y - particle.y;
-                const distance = Math.max(32, Math.hypot(dx, dy));
-                const force = Math.min(120 / distance, 2.2);
-                particle.vx += (dx / distance) * force * 0.04;
-                particle.vy += (dy / distance) * force * 0.04;
-            }
-
-            particle.vx *= 0.985;
-            particle.vy *= 0.985;
+            particle.vx += (targetX - particle.x) * 0.075;
+            particle.vy += (targetY - particle.y) * 0.075;
+            particle.vx *= 0.8;
+            particle.vy *= 0.8;
         }
 
         particle.x += particle.vx;
         particle.y += particle.vy;
 
-        if (!rushMode) {
-            if (particle.x < -40) particle.x = canvasWidth + 40;
-            if (particle.x > canvasWidth + 40) particle.x = -40;
-            if (particle.y < -40) particle.y = canvasHeight + 40;
-            if (particle.y > canvasHeight + 40) particle.y = -40;
-        }
+        const radius = particle.size * (0.55 + particle.depth * 0.42);
+        const highlightX = particle.x - radius * 0.32;
+        const highlightY = particle.y - radius * 0.32;
+
+        const bubbleFill = ctx.createRadialGradient(
+            highlightX,
+            highlightY,
+            radius * 0.18,
+            particle.x,
+            particle.y,
+            radius * 1.15,
+        );
+        bubbleFill.addColorStop(0, `rgba(255, 251, 243, ${particle.alpha + 0.26})`);
+        bubbleFill.addColorStop(0.42, `rgba(231, 210, 179, ${particle.alpha + 0.16})`);
+        bubbleFill.addColorStop(1, `rgba(168, 128, 78, ${particle.alpha})`);
 
         ctx.beginPath();
-        ctx.fillStyle = `hsla(${particle.hue}, 86%, 72%, 0.82)`;
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.fillStyle = bubbleFill;
+        ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255, 255, 255, ${particle.alpha + 0.18})`;
+        ctx.arc(highlightX, highlightY, Math.max(1.2, radius * 0.24), 0, Math.PI * 2);
         ctx.fill();
     }
 
@@ -128,6 +140,7 @@ function closeAuthOverlay() {
     authOverlay.setAttribute("aria-hidden", "true");
     rushMode = false;
     rushTarget = null;
+    activeLaunchButton = null;
 }
 
 function setActiveTab(mode) {
@@ -139,6 +152,26 @@ function setActiveTab(mode) {
     authStatus.textContent = loginActive
         ? "Enter your account credentials to continue to the dashboard."
         : "Create an account to generate keys and manage policies.";
+}
+
+function launchAuth(button, mode) {
+    const rect = button.getBoundingClientRect();
+    rushTarget = {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+    };
+    rushMode = true;
+    activeLaunchButton = button;
+    button.disabled = true;
+    button.textContent = mode === "login" ? "Opening..." : "Preparing...";
+    window.setTimeout(() => {
+        rushMode = false;
+        openAuthOverlay(mode);
+        if (activeLaunchButton === button) {
+            button.disabled = false;
+            button.textContent = mode === "login" ? "Login" : "Sign Up";
+        }
+    }, 640);
 }
 
 async function readApiResponse(response) {
@@ -167,21 +200,8 @@ async function authenticate(path, payload, successMessage) {
     }, 420);
 }
 
-launchLoginButton.addEventListener("click", () => {
-    const rect = launchLoginButton.getBoundingClientRect();
-    rushTarget = {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-    };
-    rushMode = true;
-    launchLoginButton.disabled = true;
-    launchLoginButton.textContent = "Pulling particles in...";
-    window.setTimeout(() => {
-        openAuthOverlay("login");
-        launchLoginButton.disabled = false;
-        launchLoginButton.textContent = "Login to Sentinel";
-    }, 640);
-});
+launchLoginButton.addEventListener("click", () => launchAuth(launchLoginButton, "login"));
+launchRegisterButton.addEventListener("click", () => launchAuth(launchRegisterButton, "register"));
 
 closeAuthButton.addEventListener("click", closeAuthOverlay);
 showLoginTab.addEventListener("click", () => setActiveTab("login"));
