@@ -315,6 +315,18 @@ textarea {
     margin-top: 0;
 }
 
+.compact-2fa-card h3 {
+    margin-bottom: 8px;
+}
+
+.compact-2fa-card p {
+    margin: 0;
+}
+
+.phone-2fa-dialog {
+    width: min(100%, 520px);
+}
+
 .eyebrow {
     font-size: 0.82rem;
     letter-spacing: 0.14em;

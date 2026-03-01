@@ -47,6 +47,9 @@ const walletNetworkLabel = document.getElementById("wallet-network-label");
 const walletLastSync = document.getElementById("wallet-last-sync");
 const walletTransactionList = document.getElementById("wallet-transaction-list");
 const logoutButton = document.getElementById("logout-button");
+const openPhone2faButton = document.getElementById("open-phone-2fa-button");
+const phone2faOverlay = document.getElementById("phone-2fa-overlay");
+const closePhone2faButton = document.getElementById("close-phone-2fa-button");
 const phone2faForm = document.getElementById("phone-2fa-form");
 const phone2faNumber = document.getElementById("phone-2fa-number");
 const phone2faCode = document.getElementById("phone-2fa-code");
@@ -122,6 +125,16 @@ function formatDate(value) {
 function setPhone2faStatus(message, type = "muted") {
     phone2faStatus.textContent = message;
     phone2faStatus.dataset.state = type;
+}
+
+function openPhone2faOverlay() {
+    phone2faOverlay.classList.remove("auth-overlay-hidden");
+    phone2faOverlay.setAttribute("aria-hidden", "false");
+}
+
+function closePhone2faOverlay() {
+    phone2faOverlay.classList.add("auth-overlay-hidden");
+    phone2faOverlay.setAttribute("aria-hidden", "true");
 }
 
 function renderPhone2fa(account) {
@@ -315,6 +328,7 @@ function updateDashboardState() {
 
     accountSummary.textContent = `${accountIdentity(currentAccount)}${currentAccount.full_name ? ` | ${currentAccount.full_name}` : ""}`;
     sessionMeta.textContent = "Account session active. You can issue and manage API keys from this dashboard.";
+    openPhone2faButton.disabled = false;
     phone2faRequestButton.disabled = false;
     phone2faVerifyButton.disabled = false;
     createPolicyButton.disabled = !currentApiKey;
@@ -623,6 +637,8 @@ runAuthorizeButton.addEventListener("click", async () => {
 });
 
 logoutButton.addEventListener("click", clearSession);
+openPhone2faButton.addEventListener("click", openPhone2faOverlay);
+closePhone2faButton.addEventListener("click", closePhone2faOverlay);
 
 phone2faRequestButton.addEventListener("click", async () => {
     if (!currentSessionToken) return;
@@ -666,6 +682,7 @@ phone2faForm.addEventListener("submit", async (event) => {
         updateDashboardState();
         setPhone2faStatus(`Phone number ${data.phone_number} verified on this account.`, "success");
         log(`Verified phone number ${data.phone_number}`, "success");
+        closePhone2faOverlay();
     } catch (error) {
         setPhone2faStatus(`Phone verification failed: ${error.message}`, "error");
         log(`Phone verification failed: ${error.message}`, "error");
