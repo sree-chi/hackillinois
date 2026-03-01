@@ -46,7 +46,8 @@
                                 <h3>Verify Your Account 2FA</h3>
                                 <p id="phone-2fa-summary" class="muted">No verified phone number.</p>
                             </div>
-                            <button id="open-phone-2fa-button" class="btn btn-secondary" type="button">Verify phone</button>
+                            <button id="open-phone-2fa-button" class="btn btn-secondary" type="button">Verify
+                                phone</button>
                             <button id="logout-button" class="btn btn-ghost" type="button" disabled>Logout</button>
                         </div>
                     </div>
@@ -60,12 +61,15 @@
                                 <p class="eyebrow">Security</p>
                                 <h2>Verify your account 2FA</h2>
                             </div>
-                            <button id="close-phone-2fa-button" class="btn btn-ghost btn-close" type="button">Close</button>
+                            <button id="close-phone-2fa-button" class="btn btn-ghost btn-close"
+                                type="button">Close</button>
                         </div>
-                        <p class="muted">Optional 2FA setup. Verify a phone number on your account so you can use it as an additional security contact.</p>
+                        <p class="muted">Optional 2FA setup. Verify a phone number on your account so you can use it as
+                            an additional security contact.</p>
                         <div class="output-card">
                             <h3>Current status</h3>
-                            <p id="phone-2fa-status" class="muted">Request a code, then confirm it here. In mock mode the code is shown in the status message.</p>
+                            <p id="phone-2fa-status" class="muted">Request a code, then confirm it here. In mock mode
+                                the code is shown in the status message.</p>
                         </div>
                         <form id="phone-2fa-form" class="stack">
                             <label>
@@ -73,12 +77,15 @@
                                 <input id="phone-2fa-number" type="tel" placeholder="+1 555 555 5555" required>
                             </label>
                             <div class="action-row">
-                                <button id="phone-2fa-request-button" class="btn btn-secondary" type="button">Send code</button>
-                                <button id="phone-2fa-verify-button" class="btn btn-primary" type="submit">Verify code</button>
+                                <button id="phone-2fa-request-button" class="btn btn-secondary" type="button">Send
+                                    code</button>
+                                <button id="phone-2fa-verify-button" class="btn btn-primary" type="submit">Verify
+                                    code</button>
                             </div>
                             <label>
                                 <span>Verification code</span>
-                                <input id="phone-2fa-code" type="text" inputmode="numeric" placeholder="6-digit code" minlength="4" maxlength="12" required>
+                                <input id="phone-2fa-code" type="text" inputmode="numeric" placeholder="6-digit code"
+                                    minlength="4" maxlength="12" required>
                             </label>
                         </form>
                     </div>
@@ -253,6 +260,57 @@
                             <div class="action-row">
                                 <a class="btn btn-ghost" href="/activity.html">Open Dashboard</a>
                             </div>
+                        </div>
+                    </section>
+                </section>
+
+                <section class="grid">
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">API Cost Tracking</p>
+                            <h2>API Pricing Database</h2>
+                        </div>
+                        <p class="muted">Add known APIs and their cost per call so Sentinel can calculate spend
+                            effectively.</p>
+
+                        <form id="pricing-form" class="stack" style="margin-top: 1rem;">
+                            <label>
+                                <span>Select API Key</span>
+                                <select id="pricing-client-id" required>
+                                    <option value="">Loading keys...</option>
+                                </select>
+                            </label>
+
+                            <div id="pricing-fields" style="display: none;" class="stack">
+                                <label>
+                                    <span>API Link (e.g., openai/v1/chat/completions)</span>
+                                    <input id="pricing-api-link" type="text" placeholder="Provider/Endpoint expected"
+                                        required>
+                                </label>
+
+                                <label>
+                                    <span>Price per call (USD)</span>
+                                    <input id="pricing-price-per-call" type="number" step="0.000001" min="0"
+                                        placeholder="0.01" required>
+                                </label>
+
+                                <button id="save-pricing-btn" class="btn btn-secondary" type="submit">Save
+                                    Pricing</button>
+                                <div id="pricing-status" class="muted" style="margin-top: 8px;"></div>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Saved Values</p>
+                            <h2>Recorded API Prices</h2>
+                        </div>
+                        <p class="muted">Select a key on the left to view its associated API prices. Calls without a
+                            recorded price will be denied.</p>
+
+                        <div id="pricing-list" class="dashboard-list">
+                            <div class="empty-state">Select a key to see saved prices.</div>
                         </div>
                     </section>
                 </section>

@@ -51,6 +51,7 @@ from src.models import (
     LoginAccountRequest,
     PhoneCodeChallengeResponse,
     PublicApiOverview,
+    ApiPricingRequest,
     CreatePolicyRequest,
     ErrorEnvelope,
     IssueApiKeyRequest,
@@ -730,6 +731,57 @@ def restore_account_api_key(
         "suspended_at": client.suspended_at,
     }
 
+@app.post("/v1/accounts/me/keys/{client_id}/pricing")
+def set_api_pricing(
+    client_id: str,
+    payload: ApiPricingRequest,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    from src.db_models import AccountApiPricingModel
+    store = DatabaseStore(db)
+    client = store.get_api_client_by_id(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="API Key not found")
+
+    pricing = store.get_api_pricing(client_id, payload.api_link)
+    if pricing:
+        pricing.price_per_call_usd = payload.price_per_call_usd
+        db.commit()
+    else:
+        new_pricing = AccountApiPricingModel(
+            client_id=client_id,
+            api_link=payload.api_link,
+            price_per_call_usd=payload.price_per_call_usd
+        )
+        db.add(new_pricing)
+        db.commit()
+
+    return {"status": "success"}
+
+@app.get("/v1/accounts/me/keys/{client_id}/pricing")
+def get_api_pricing(
+    client_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    client = store.get_api_client_by_id(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="API Key not found")
+
+    pricings = store.list_api_pricing(client_id)
+    return {
+        "client_id": client_id,
+        "pricing": [
+            {
+                "api_link": p.api_link,
+                "price_per_call_usd": p.price_per_call_usd,
+                "created_at": p.created_at.isoformat()
+            } for p in pricings
+        ]
+    }
+
 
 @app.post(
     "/v1/developer/keys/{client_id}/rotate",
@@ -888,16 +940,31 @@ def authorize(
     )
     store = DatabaseStore(db)
 
+    # ── Lookup API Key Client ──────
+    client = None
+    raw_key = extract_api_key(
+        request.headers.get("authorization"),
+        request.headers.get("x-api-key"),
+    )
+    if raw_key:
+        client = store.get_api_client_by_hash(hash_api_key(raw_key))
+
     # ── Auto-fill agent_wallet from the API key's linked wallet ──────
-    if not payload.agent_wallet:
-        raw_key = extract_api_key(
-            request.headers.get("authorization"),
-            request.headers.get("x-api-key"),
-        )
-        if raw_key:
-            client = store.get_api_client_by_hash(hash_api_key(raw_key))
-            if client and client.wallet_address:
-                payload.agent_wallet = client.wallet_address
+    if not payload.agent_wallet and client and client.wallet_address:
+        payload.agent_wallet = client.wallet_address
+
+    # ── Enforce Server-Side API Pricing ──────
+    if client:
+        pricing = store.get_api_pricing(client.client_id, payload.action.resource)
+        if pricing:
+            payload.action.amount_usd = pricing.price_per_call_usd
+        else:
+            raise error_response(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="PRICE_NOT_FOUND",
+                message=f"API is not known and price should be included before being used again. Missing price for resource: {payload.action.resource}",
+                policy_id=payload.policy_id,
+            )
 
     # Resolve: accept either a specific version id or a root id
     policy = store.get_policy(payload.policy_id)

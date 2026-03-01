@@ -58,6 +58,16 @@ const phone2faVerifyButton = document.getElementById("phone-2fa-verify-button");
 const phone2faSummary = document.getElementById("phone-2fa-summary");
 const phone2faStatus = document.getElementById("phone-2fa-status");
 
+const pricingForm = document.getElementById("pricing-form");
+const pricingClientId = document.getElementById("pricing-client-id");
+const pricingFields = document.getElementById("pricing-fields");
+const pricingApiLink = document.getElementById("pricing-api-link");
+const pricingPricePerCall = document.getElementById("pricing-price-per-call");
+const savePricingBtn = document.getElementById("save-pricing-btn");
+const pricingStatus = document.getElementById("pricing-status");
+const pricingList = document.getElementById("pricing-list");
+let selectedPricingClientId = "";
+
 function resolveApiBase() {
     const { hostname, origin } = window.location;
     const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
@@ -283,6 +293,29 @@ function updateSnippets() {
 
 function renderApiKeys(apiKeys) {
     const visibleKeys = apiKeys.filter((entry) => !entry.revoked_at);
+
+    // Update pricing dropdown
+    if (visibleKeys.length === 0) {
+        if (pricingClientId) {
+            pricingClientId.innerHTML = '<option value="">No active keys available</option>';
+            pricingClientId.disabled = true;
+            pricingFields.style.display = 'none';
+        }
+    } else {
+        if (pricingClientId) {
+            const options = visibleKeys.map(k => `<option value="${k.client_id}">${k.app_name} (${k.client_id.substring(0, 8)})</option>`).join("");
+            pricingClientId.innerHTML = `<option value="">Select a key...</option>${options}`;
+            pricingClientId.disabled = false;
+
+            // If a key was selected before, try to reselect it
+            if (selectedPricingClientId && visibleKeys.some(k => k.client_id === selectedPricingClientId)) {
+                pricingClientId.value = selectedPricingClientId;
+            } else {
+                selectedPricingClientId = "";
+                pricingFields.style.display = 'none';
+            }
+        }
+    }
 
     if (!visibleKeys.length) {
         apiKeyList.innerHTML = '<div class="empty-state">No keys issued yet.</div>';
@@ -717,3 +750,95 @@ log("Dashboard ready.");
 
 window.addEventListener("focus", updateWalletProviderState);
 window.addEventListener("load", updateWalletProviderState);
+
+// --- API Pricing Management ---
+
+if (pricingClientId) {
+    pricingClientId.addEventListener("change", async (e) => {
+        selectedPricingClientId = e.target.value;
+        if (selectedPricingClientId) {
+            pricingFields.style.display = "flex";
+            await fetchAndRenderPricingList(selectedPricingClientId);
+        } else {
+            pricingFields.style.display = "none";
+            pricingList.innerHTML = '<div class="empty-state">Select a key to see saved prices.</div>';
+        }
+    });
+}
+
+if (pricingForm) {
+    pricingForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!selectedPricingClientId) return;
+
+        savePricingBtn.disabled = true;
+        pricingStatus.textContent = "Saving...";
+        pricingStatus.className = "muted";
+
+        try {
+            const res = await fetch(`${API_BASE}/v1/accounts/me/keys/${selectedPricingClientId}/pricing`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${currentSessionToken}`
+                },
+                body: JSON.stringify({
+                    api_link: pricingApiLink.value.trim(),
+                    price_per_call_usd: parseFloat(pricingPricePerCall.value)
+                })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.detail?.message || "Failed to save pricing");
+            }
+
+            pricingStatus.textContent = "Saved successfully!";
+            pricingStatus.className = "status-success";
+            pricingApiLink.value = "";
+            pricingPricePerCall.value = "";
+
+            await fetchAndRenderPricingList(selectedPricingClientId);
+
+            setTimeout(() => { pricingStatus.textContent = ""; }, 3000);
+        } catch (err) {
+            pricingStatus.textContent = `Error: ${err.message}`;
+            pricingStatus.className = "status-warning";
+        } finally {
+            savePricingBtn.disabled = false;
+        }
+    });
+}
+
+async function fetchAndRenderPricingList(clientId) {
+    if (!pricingList) return;
+    pricingList.innerHTML = '<div class="empty-state">Loading prices...</div>';
+    try {
+        const res = await fetch(`${API_BASE}/v1/accounts/me/keys/${clientId}/pricing`, {
+            headers: { "Authorization": `Bearer ${currentSessionToken}` }
+        });
+        if (!res.ok) throw new Error("Failed to load prices");
+
+        const data = await res.json();
+
+        if (!data.pricing || data.pricing.length === 0) {
+            pricingList.innerHTML = '<div class="empty-state">No prices saved for this key yet.</div>';
+            return;
+        }
+
+        pricingList.innerHTML = data.pricing.map(p => `
+            <div class="activity-card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;">
+                <div>
+                    <strong style="font-family:'IBM Plex Mono',monospace;font-size:0.9rem;">${p.api_link}</strong>
+                    <div class="activity-meta" style="margin-top:4px;">Added ${new Date(p.created_at).toLocaleString()}</div>
+                </div>
+                <div>
+                    <strong style="font-size:1.1rem;color:var(--primary-dark)">$${parseFloat(p.price_per_call_usd).toFixed(6)}</strong>
+                </div>
+            </div>
+        `).join("");
+
+    } catch (err) {
+        pricingList.innerHTML = `<div class="status-warning" style="padding:16px;">Error loading prices: ${err.message}</div>`;
+    }
+}
