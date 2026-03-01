@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 </head>
 <body class="login-body">
     <div class="login-shell">
@@ -15,9 +15,15 @@
 
         <main class="login-layout">
             <section class="login-minimal">
-                <div class="login-actions login-actions-row">
-                    <button id="launch-register-button" class="btn btn-secondary btn-launch" type="button">Sign Up</button>
-                    <button id="launch-login-button" class="btn btn-primary btn-launch" type="button">Login</button>
+                <div class="login-stage">
+                    <div id="login-title-shell" class="login-title-shell">
+                        <p class="login-kicker">Sentinel Auth</p>
+                        <h1 id="login-title" class="login-title">Secure access with lift.</h1>
+                    </div>
+                    <div class="login-actions login-actions-row">
+                        <button id="launch-register-button" class="btn btn-secondary btn-launch" type="button">Sign Up</button>
+                        <button id="launch-login-button" class="btn btn-primary btn-launch" type="button">Login</button>
+                    </div>
                 </div>
             </section>
         </main>

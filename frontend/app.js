@@ -5,11 +5,13 @@ const STORAGE_KEYS = {
     sessionToken: "sentinel.sessionToken",
 };
 
-const PARTICLE_COUNT = 170;
+const PARTICLE_COUNT = 340;
 const canvas = document.getElementById("gravity-canvas");
 const ctx = canvas.getContext("2d");
 const launchLoginButton = document.getElementById("launch-login-button");
 const launchRegisterButton = document.getElementById("launch-register-button");
+const loginTitleShell = document.getElementById("login-title-shell");
+const loginTitle = document.getElementById("login-title");
 const authOverlay = document.getElementById("auth-overlay");
 const authStatus = document.getElementById("auth-status");
 const closeAuthButton = document.getElementById("close-auth-button");
@@ -132,6 +134,22 @@ function animateParticles() {
     requestAnimationFrame(animateParticles);
 }
 
+function updateTitleMotion() {
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+    const normalizedX = pointer.active ? (pointer.x - centerX) / centerX : 0;
+    const normalizedY = pointer.active ? (pointer.y - centerY) / centerY : 0;
+
+    loginTitleShell.style.transform = `
+        perspective(900px)
+        rotateX(${(-normalizedY * 9).toFixed(2)}deg)
+        rotateY(${(normalizedX * 11).toFixed(2)}deg)
+        translate3d(${(normalizedX * 18).toFixed(2)}px, ${(normalizedY * 12).toFixed(2)}px, 0)
+    `;
+
+    loginTitle.style.transform = `translate3d(${(normalizedX * 10).toFixed(2)}px, ${(normalizedY * 8).toFixed(2)}px, ${(Math.abs(normalizedX) + Math.abs(normalizedY)) * 10}px)`;
+}
+
 function openAuthOverlay(defaultTab = "login") {
     authOverlay.classList.remove("auth-overlay-hidden");
     authOverlay.setAttribute("aria-hidden", "false");
@@ -241,18 +259,22 @@ window.addEventListener("mousemove", (event) => {
     pointer.x = event.clientX;
     pointer.y = event.clientY;
     pointer.active = true;
+    updateTitleMotion();
 });
 
 window.addEventListener("mouseleave", () => {
     pointer.active = false;
+    updateTitleMotion();
 });
 
 window.addEventListener("resize", () => {
     resizeCanvas();
     seedParticles();
+    updateTitleMotion();
 });
 
 restoreSession();
 resizeCanvas();
 seedParticles();
+updateTitleMotion();
 animateParticles();
