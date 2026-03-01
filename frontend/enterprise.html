@@ -38,7 +38,10 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--ent-bg);
+            background:
+                radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 28%),
+                radial-gradient(circle at 50% 50%, rgba(215, 202, 184, 0.28), rgba(215, 202, 184, 0) 54%),
+                linear-gradient(180deg, #f7f4ef 0%, #f0ebe3 55%, #e9e2d8 100%);
             color: var(--ent-text);
             min-height: 100vh;
             display: flex;
@@ -1012,9 +1015,8 @@
         <nav class="topbar-nav">
             <a href="/documentation/index.html">Documentation</a>
             <a href="/dashboard.html">Keys</a>
-            <a href="/activity.html">Dashboard</a>
+            <a href="/activity.html" class="active">Dashboard</a>
             <a href="/agent.html">Agent Demo</a>
-            <a href="/enterprise.html" class="active">Governance</a>
         </nav>
         <div class="topbar-actions">
             <span id="account-chip">Not signed in</span>
