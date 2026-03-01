@@ -700,6 +700,7 @@ class DatabaseStore:
         return float(result) if result else 0.0
 
     # ── Agent Identity ─────────────────────────────────────────────────────
+    ###
 
     def create_agent(self, payload: CreateAgentRequest, account_id: str) -> AgentRecord:
         agent = AgentRecord(
