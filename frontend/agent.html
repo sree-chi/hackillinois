@@ -14,14 +14,16 @@
 </head>
 
 <body>
+    <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
+    <div class="page-backdrop-title" data-background-title>Sentinel Auth</div>
     <div class="page-shell">
         <main class="layout">
             <nav class="topbar panel">
                 <a class="brand-link" href="/">Sentinel Auth</a>
                 <div class="topbar-links">
-                    <a class="topbar-link" href="/">Login</a>
-                    <a class="topbar-link" href="/dashboard.html">Keys</a>
                     <a class="topbar-link" href="/activity.html">Dashboard</a>
+                    <a class="topbar-link" href="/dashboard.html">Keys</a>
+                    <a class="topbar-link" href="/documentation/index.html">Documentation</a>
                     <a class="topbar-link topbar-link-active" href="/agent.html">Agent Demo</a>
                 </div>
             </nav>
@@ -97,6 +99,7 @@
     </div>
 
     <script type="module" src="/agent.js"></script>
+    <script type="module" src="/background.js"></script>
 </body>
 
 </html>

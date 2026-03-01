@@ -16,6 +16,12 @@ class ReceiptStatusEnum(enum.Enum):
     skipped = "skipped"
     failed = "failed"
 
+class BudgetExceptionStatus(enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    denied = "denied"
+    used = "used"
+
 class PolicyModel(Base):
     __tablename__ = "policies"
 
@@ -98,6 +104,8 @@ class ApiClientModel(Base):
     use_case = Column(String(500), nullable=True)
     api_key_hash = Column(String(64), nullable=False, unique=True, index=True)
     api_key_prefix = Column(String(24), nullable=False, unique=True, index=True)
+    wallet_address = Column(String(120), nullable=True, index=True)
+    wallet_label = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     suspended_at = Column(DateTime(timezone=True), nullable=True)
@@ -197,4 +205,19 @@ class AgentModel(Base):
 
     __table_args__ = (
         Index("ix_agents_account_created", "account_id", "created_at"),
+    )
+
+class BudgetExceptionModel(Base):
+    __tablename__ = "budget_exceptions"
+
+    id = Column(String, primary_key=True, index=True)
+    policy_id = Column(String, nullable=False, index=True)
+    agent_wallet = Column(String(120), nullable=False, index=True)
+    amount_usd = Column(Float, nullable=False)
+    status = Column(Enum(BudgetExceptionStatus), default=BudgetExceptionStatus.pending, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_budget_exceptions_lookup", "policy_id", "agent_wallet", "status"),
     )

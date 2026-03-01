@@ -52,6 +52,22 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def normalize_phone_number(phone_number: str) -> str:
+    """Normalize and validate a phone number to E.164-like format.
+
+    Strips whitespace, dashes, and parentheses then verifies the result
+    starts with '+' and contains only digits afterwards.
+    Raises ValueError if the number looks invalid.
+    """
+    cleaned = phone_number.strip().replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+    if not cleaned.startswith("+"):
+        raise ValueError(f"Phone number must start with '+' country code, got: {phone_number!r}")
+    digits = cleaned[1:]
+    if not digits.isdigit() or len(digits) < 7 or len(digits) > 15:
+        raise ValueError(f"Invalid phone number: {phone_number!r}")
+    return cleaned
+
+
 # ── In-process rate limiter for auth endpoints ────────────────────────────────
 _auth_rate_lock = threading.Lock()
 # Maps IP -> deque of attempt timestamps

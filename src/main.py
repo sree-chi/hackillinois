@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+# Load .env.local BEFORE any src.* imports so that modules like auth.py
+# can read env vars (API_KEY, APP_ENV, etc.) at import time.
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=".env.local", override=True)
+
 import logging
 import os
 import json
@@ -15,6 +20,7 @@ from src.auth import (
     api_key_prefix,
     check_auth_rate_limit,
     extract_session_token,
+    extract_api_key,
     generate_api_key,
     generate_session_token,
     hash_api_key,
@@ -41,6 +47,7 @@ from src.models import (
     AuthorizationProof,
     AuthorizationDecision,
     AuthorizeRequest,
+    BudgetExceptionRecord,
     CreateAgentRequest,
     LinkedWalletRecord,
     LoginAccountRequest,
@@ -104,6 +111,21 @@ def ensure_runtime_schema_compatibility() -> None:
             else:
                 statements.append("ALTER TABLE policies ADD COLUMN root_policy_id VARCHAR")
         if "idempotency_key" not in policy_columns:
+                statements.append("ALTER TABLE api_clients ADD COLUMN suspended_at DATETIME")
+        if "wallet_address" not in api_client_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS wallet_address VARCHAR(120)")
+            else:
+                statements.append("ALTER TABLE api_clients ADD COLUMN wallet_address VARCHAR(120)")
+        if "wallet_label" not in api_client_columns:
+            if dialect == "postgresql":
+                statements.append("ALTER TABLE api_clients ADD COLUMN IF NOT EXISTS wallet_label VARCHAR(100)")
+            else:
+                statements.append("ALTER TABLE api_clients ADD COLUMN wallet_label VARCHAR(100)")
+
+    if "accounts" in table_names:
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+        if "phone_number" not in account_columns:
             if dialect == "postgresql":
                 statements.append("ALTER TABLE policies ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR")
                 statements.append(
@@ -502,6 +524,8 @@ def issue_developer_key(
         owner_email=account.email,
         api_key=key,
         api_key_prefix=client.api_key_prefix,
+        wallet_address=payload.wallet_address,
+        wallet_label=payload.wallet_label,
         created_at=client.created_at,
         base_url=base_url,
         docs_url=f"{base_url}/docs",
@@ -720,6 +744,7 @@ def list_policy_versions(policy_id: str, db: Session = Depends(get_db)):
 @app.post("/v1/authorize", dependencies=[Depends(verify_api_key)])
 def authorize(
     payload: AuthorizeRequest,
+    request: Request,
     response: Response,
     x_solana_tx_signature: str | None = Header(default=None, alias="x-solana-tx-signature"),
     db: Session = Depends(get_db),
@@ -728,6 +753,17 @@ def authorize(
         f"Authorization request — policy: {payload.policy_id}, action: {payload.action.type}"
     )
     store = DatabaseStore(db)
+
+    # ── Auto-fill agent_wallet from the API key's linked wallet ──────
+    if not payload.agent_wallet:
+        raw_key = extract_api_key(
+            request.headers.get("authorization"),
+            request.headers.get("x-api-key"),
+        )
+        if raw_key:
+            client = store.get_api_client_by_hash(hash_api_key(raw_key))
+            if client and client.wallet_address:
+                payload.agent_wallet = client.wallet_address
 
     # Resolve: accept either a specific version id or a root id
     policy = store.get_policy(payload.policy_id)
@@ -860,12 +896,25 @@ def authorize(
             severity="high",
             explanation="This target service is not trusted to execute actions under the policy.",
         )
-    elif rules.max_spend_usd is not None and (payload.action.amount_usd or 0) > rules.max_spend_usd:
-        violation = SafetyViolation(
-            category="spend_limit_exceeded",
-            severity="high",
-            explanation="The proposed action exceeds the policy maximum spend limit.",
-        )
+    elif rules.max_spend_usd is not None:
+        total_spend = store.get_total_spend_usd(payload.policy_id)
+        projected_spend = total_spend + (payload.action.amount_usd or 0)
+        
+        budget_waived = False
+        if payload.agent_wallet and payload.action.amount_usd is not None:
+            if store.consume_approved_exception(payload.policy_id, payload.agent_wallet, payload.action.amount_usd):
+                budget_waived = True
+                logger.info(f"Budget exception consumed for wallet {payload.agent_wallet}; waiving limit.")
+
+        if not budget_waived and projected_spend > rules.max_spend_usd:
+            if payload.agent_wallet and payload.action.amount_usd is not None:
+                store.create_budget_exception(payload.policy_id, payload.agent_wallet, payload.action.amount_usd)
+            
+            violation = SafetyViolation(
+                category="spend_limit_exceeded",
+                severity="high",
+                explanation=f"The proposed action (${payload.action.amount_usd or 0:.2f}) would exceed the policy's remaining budget of ${max(0, rules.max_spend_usd - total_spend):.2f}.",
+            )
     elif (
         rules.requires_human_approval_for_delete
         and method == "DELETE"
@@ -1200,3 +1249,41 @@ def delete_agent(
             message="The requested agent does not exist.",
         )
     return {"status": "success", "agent_id": agent_id}
+
+
+# ── Budget Exceptions ────────────────────────────────────────────────────────
+
+@app.get("/v1/policies/{policy_id}/exceptions", response_model=list[BudgetExceptionRecord])
+def list_budget_exceptions(
+    policy_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    return store.list_exceptions(policy_id)
+
+@app.post("/v1/exceptions/{exception_id}/approve", response_model=BudgetExceptionRecord)
+def approve_budget_exception(
+    exception_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    from src.db_models import BudgetExceptionStatus as DBBudgetExceptionStatus
+    store = DatabaseStore(db)
+    record = store.update_exception_status(exception_id, DBBudgetExceptionStatus.approved)
+    if not record:
+        raise HTTPException(status_code=404, detail="Exception request not found")
+    return record
+
+@app.post("/v1/exceptions/{exception_id}/deny", response_model=BudgetExceptionRecord)
+def deny_budget_exception(
+    exception_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    from src.db_models import BudgetExceptionStatus as DBBudgetExceptionStatus
+    store = DatabaseStore(db)
+    record = store.update_exception_status(exception_id, DBBudgetExceptionStatus.denied)
+    if not record:
+        raise HTTPException(status_code=404, detail="Exception request not found")
+    return record

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel Auth API Docs - OpenAI Integration</title>
+    <title>Sentinel Auth API Docs - AI Agent Integration</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,9 +27,9 @@
 
             <section class="hero panel">
                 <p class="eyebrow">API Documentation</p>
-                <h1>OpenAI Agent Integration</h1>
+                <h1>AI Agent Integration</h1>
                 <p class="hero-copy">
-                    Learn how to route your OpenAI assistants, ChatGPT bots, and other autonomous agents through the
+                    Learn how to route your LLM assistants, autonomous agents, and AI bots through the
                     Sentinel Auth policy engine.
                     Ensure your agents operate within strict financial boundaries backed by Solana state proofs.
                 </p>
@@ -39,44 +39,42 @@
                 <section class="panel">
                     <div class="section-heading">
                         <p class="eyebrow">Guide</p>
-                        <h2>Using OpenAI Function Calling with Sentinel</h2>
+                        <h2>Using LLM Tool Calling with Sentinel</h2>
                     </div>
                     <p class="muted">
-                        When building agents with the OpenAI API, you should expose the Sentinel Auth proxy as an
-                        available function or tool. Instead of letting the OpenAI model directly hit live APIs, you
-                        intercept the intent and validate it.
+                        When building agents with APIs like Google Gemini, OpenAI, or Anthropic, you should expose the Sentinel Auth proxy as an
+                        available function or tool. Instead of letting the AI model directly hit live APIs, you
+                        intercept its intent and validate it against your security policy.
                     </p>
 
                     <div class="output-card">
                         <h3>1. Model Tool Definition</h3>
-                        <p class="muted">Add this schema to your OpenAI Chat Completions tool array:</p>
+                        <p class="muted">Add a schema similar to this to your agent's tool/function definitions:</p>
                         <pre class="snippet">
 {
-  "type": "function",
-  "function": {
-    "name": "request_action_authorization",
-    "description": "Request permission to perform a financial or high-risk action.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "action_type": { "type": "string" },
-        "http_method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE"] },
-        "resource": { "type": "string" },
-        "amount_usd": { "type": "number" },
-        "reasoning": { "type": "string", "description": "Why the agent needs to perform this action." }
-      },
-      "required": ["action_type", "http_method", "resource", "amount_usd", "reasoning"]
-    }
+  "name": "request_action_authorization",
+  "description": "Request permission to perform a financial or high-risk action.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action_type": { "type": "string" },
+      "http_method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE"] },
+      "resource": { "type": "string" },
+      "amount_usd": { "type": "number" },
+      "reasoning": { "type": "string", "description": "Detailed reasoning for why this action is necessary." }
+    },
+    "required": ["action_type", "http_method", "resource", "amount_usd", "reasoning"]
   }
 }</pre>
                     </div>
 
                     <div class="output-card">
                         <h3>2. Submitting to Sentinel Auth</h3>
-                        <p class="muted">When the OpenAI model calls the function, parse its arguments and submit a POST
+                        <p class="muted">When the LLM decides to call the tool, parse its arguments and submit a POST
                             request to the <code>/v1/authorize</code> endpoint of your Sentinel instance.</p>
                         <pre class="snippet">
-const openaiArguments = JSON.parse(toolCall.function.arguments);
+// Parse the tool/function arguments returned by Gemini/OpenAI/Claude
+const agentArguments = JSON.parse(toolCall.arguments);
 
 const res = await fetch(`https://api.sentinel-auth.com/v1/authorize`, {
   method: "POST",
@@ -86,19 +84,19 @@ const res = await fetch(`https://api.sentinel-auth.com/v1/authorize`, {
   },
   body: JSON.stringify({
     policy_id: "pol_active_policy_id",
-    requester: "agent://openai_gpt4o",
+    requester: "agent://llm_bot_v1",
     action: {
-      type: openaiArguments.action_type,
-      http_method: openaiArguments.http_method,
-      resource: openaiArguments.resource,
-      amount_usd: openaiArguments.amount_usd
+      type: agentArguments.action_type,
+      http_method: agentArguments.http_method,
+      resource: agentArguments.resource,
+      amount_usd: agentArguments.amount_usd
     },
-    reasoning_trace: openaiArguments.reasoning
+    reasoning_trace: agentArguments.reasoning
   })
 });
 
 const authorizationResponse = await res.json();
-// Send this response back to the OpenAI model as a tool message!</pre>
+// Send this response back to the LLM so it knows if it was approved or blocked!</pre>
                     </div>
 
                     <div class="output-card">
@@ -106,12 +104,12 @@ const authorizationResponse = await res.json();
                         <p class="muted">Depending on what Sentinel Auth returns, handle the authorization flow:</p>
                         <ul class="muted" style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
                             <li><strong>200 OK:</strong> The action is approved. You will receive a
-                                <code>receipt_signature</code> anchored on Solana. Execute the real API call.</li>
+                                <code>receipt_signature</code> anchored on Solana. Proceed to execute the real API call.</li>
                             <li><strong>402 Payment Required:</strong> The amount exceeds the
                                 <code>HIGH_RISK_THRESHOLD</code>. You must use an x402 token or sign a Solana
-                                transaction to approve it.</li>
-                            <li><strong>403 Forbidden:</strong> The OpenAI model attempted an action that violated the
-                                active safety policy (e.g. over spend limit). Reject the action.</li>
+                                transaction to approve the risk.</li>
+                            <li><strong>403 Forbidden:</strong> The AI model attempted an action that violated the
+                                active safety policy (e.g., over spend limit). Reject the action.</li>
                         </ul>
                     </div>
                 </section>

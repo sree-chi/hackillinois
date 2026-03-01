@@ -47,6 +47,9 @@ const walletNetworkLabel = document.getElementById("wallet-network-label");
 const walletLastSync = document.getElementById("wallet-last-sync");
 const walletTransactionList = document.getElementById("wallet-transaction-list");
 const logoutButton = document.getElementById("logout-button");
+const openPhone2faButton = document.getElementById("open-phone-2fa-button");
+const phone2faOverlay = document.getElementById("phone-2fa-overlay");
+const closePhone2faButton = document.getElementById("close-phone-2fa-button");
 const phone2faForm = document.getElementById("phone-2fa-form");
 const phone2faNumber = document.getElementById("phone-2fa-number");
 const phone2faCode = document.getElementById("phone-2fa-code");
@@ -122,6 +125,16 @@ function formatDate(value) {
 function setPhone2faStatus(message, type = "muted") {
     phone2faStatus.textContent = message;
     phone2faStatus.dataset.state = type;
+}
+
+function openPhone2faOverlay() {
+    phone2faOverlay.classList.remove("auth-overlay-hidden");
+    phone2faOverlay.setAttribute("aria-hidden", "false");
+}
+
+function closePhone2faOverlay() {
+    phone2faOverlay.classList.add("auth-overlay-hidden");
+    phone2faOverlay.setAttribute("aria-hidden", "true");
 }
 
 function renderPhone2fa(account) {
@@ -279,8 +292,9 @@ function renderApiKeys(apiKeys) {
         <article class="activity-card activity-success">
             <div class="activity-header">
                 <div class="activity-copy">
-                    <p class="activity-title">${entry.app_name}</p>
+                    <p class="activity-title">${entry.app_name}${entry.wallet_label ? ` <span style="font-size:0.82rem;color:var(--primary-dark);font-weight:600">🔗 ${entry.wallet_label}</span>` : ""}</p>
                     <p class="activity-meta">${entry.owner_email} | Created ${new Date(entry.created_at).toLocaleString()}</p>
+                    ${entry.wallet_address ? `<p class="activity-meta" style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;">Wallet: ${entry.wallet_address}</p>` : ""}
                 </div>
                 <div class="action-row action-row-wrap">
                     <span class="status-pill ${entry.suspended_at ? "status-warning" : "status-success"}">
@@ -314,6 +328,7 @@ function updateDashboardState() {
 
     accountSummary.textContent = `${accountIdentity(currentAccount)}${currentAccount.full_name ? ` | ${currentAccount.full_name}` : ""}`;
     sessionMeta.textContent = "Account session active. You can issue and manage API keys from this dashboard.";
+    openPhone2faButton.disabled = false;
     phone2faRequestButton.disabled = false;
     phone2faVerifyButton.disabled = false;
     createPolicyButton.disabled = !currentApiKey;
@@ -544,6 +559,8 @@ issueKeyForm.addEventListener("submit", async (event) => {
                 app_name: document.getElementById("app-name").value.trim(),
                 owner_name: document.getElementById("owner-name").value.trim() || null,
                 use_case: document.getElementById("use-case").value.trim() || null,
+                wallet_label: document.getElementById("wallet-label").value.trim() || null,
+                wallet_address: document.getElementById("wallet-address").value.trim() || null,
             }),
         });
         const data = await readApiResponse(response);
@@ -620,6 +637,8 @@ runAuthorizeButton.addEventListener("click", async () => {
 });
 
 logoutButton.addEventListener("click", clearSession);
+openPhone2faButton.addEventListener("click", openPhone2faOverlay);
+closePhone2faButton.addEventListener("click", closePhone2faOverlay);
 
 phone2faRequestButton.addEventListener("click", async () => {
     if (!currentSessionToken) return;
@@ -663,6 +682,7 @@ phone2faForm.addEventListener("submit", async (event) => {
         updateDashboardState();
         setPhone2faStatus(`Phone number ${data.phone_number} verified on this account.`, "success");
         log(`Verified phone number ${data.phone_number}`, "success");
+        closePhone2faOverlay();
     } catch (error) {
         setPhone2faStatus(`Phone verification failed: ${error.message}`, "error");
         log(`Phone verification failed: ${error.message}`, "error");

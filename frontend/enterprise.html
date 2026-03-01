@@ -38,7 +38,10 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--ent-bg);
+            background:
+                radial-gradient(circle at 30% 22%, rgba(241, 228, 204, 0.9), rgba(241, 228, 204, 0) 30%),
+                radial-gradient(circle at 72% 32%, rgba(224, 205, 174, 0.72), rgba(224, 205, 174, 0) 36%),
+                linear-gradient(180deg, #f1e3ca 0%, #ead9bc 54%, #e2cfaf 100%);
             color: var(--ent-text);
             min-height: 100vh;
             display: flex;
@@ -1000,6 +1003,8 @@
 </head>
 
 <body>
+    <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
+    <div class="page-backdrop-title" data-background-title>Sentinel Auth</div>
 
     <!-- Top Bar -->
     <header class="topbar">
@@ -1010,10 +1015,10 @@
                 style="font-size:0.75rem; color:var(--ent-muted); font-weight:400; margin-left:0.25rem;">Enterprise</span>
         </div>
         <nav class="topbar-nav">
-            <a href="/dashboard.html">Dashboard</a>
-            <a href="/activity.html">Activity</a>
+            <a href="/activity.html" class="active">Dashboard</a>
+            <a href="/dashboard.html">Keys</a>
+            <a href="/documentation/index.html">Documentation</a>
             <a href="/agent.html">Agent Demo</a>
-            <a href="/enterprise.html" class="active">Governance</a>
         </nav>
         <div class="topbar-actions">
             <span id="account-chip">Not signed in</span>
@@ -1184,6 +1189,7 @@
     </div>
 
     <script type="module" src="./enterprise.js"></script>
+    <script type="module" src="./background.js"></script>
 </body>
 
 </html>
