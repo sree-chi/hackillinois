@@ -226,12 +226,7 @@ class BudgetExceptionModel(Base):
 class AccountApiPricingModel(Base):
     __tablename__ = "account_api_pricing"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    client_id = Column(String, index=True, nullable=False)
-    api_link = Column(String(500), nullable=False)
+    client_id = Column(String, primary_key=True, nullable=False)
+    api_link = Column(String(500), primary_key=True, nullable=False)
     price_per_call_usd = Column(Float, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    __table_args__ = (
-        Index("ix_api_pricing_client_api", "client_id", "api_link", unique=True),
-    )
