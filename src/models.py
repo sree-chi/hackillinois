@@ -124,6 +124,15 @@ class IssueApiKeyRequest(BaseModel):
     wallet_label: str | None = Field(default=None, max_length=100)
 
 
+class UpdateApiPricingRequest(BaseModel):
+    provider_name: str = Field(min_length=1, max_length=100)
+    api_name: str = Field(min_length=1, max_length=120)
+    price_per_call_usd: float = Field(ge=0)
+    monthly_budget_usd: float | None = Field(default=None, ge=0)
+    sol_usd_rate: float | None = Field(default=None, gt=0)
+    billing_notes: str | None = Field(default=None, max_length=1000)
+
+
 class RegisterAccountRequest(BaseModel):
     email: str = Field(min_length=3, max_length=200)
     password: str = Field(min_length=8, max_length=200)
@@ -412,6 +421,34 @@ class PhoneCodeChallengeResponse(BaseModel):
     dev_code: str | None = None
 
 
+class AccountApiPricingRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    pricing_id: str = Field(default_factory=lambda: new_id("prc"))
+    account_id: str
+    client_id: str
+    provider_name: str
+    api_name: str
+    price_per_call_usd: float
+    monthly_budget_usd: float | None = None
+    sol_usd_rate: float | None = None
+    billing_notes: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime | None = None
+
+
+class AccountApiCostSummary(BaseModel):
+    client_id: str
+    attributed_wallet: str | None = None
+    total_allowed_requests: int = 0
+    actual_tracked_spend_usd: float = 0
+    estimated_running_cost_usd: float = 0
+    estimated_running_cost_sol: float | None = None
+    monthly_budget_usd: float | None = None
+    remaining_budget_usd: float | None = None
+    over_budget: bool = False
+
+
 class AccountApiKeySummary(BaseModel):
     client_id: str
     app_name: str
@@ -423,6 +460,8 @@ class AccountApiKeySummary(BaseModel):
     last_used_at: datetime | None = None
     suspended_at: datetime | None = None
     revoked_at: datetime | None = None
+    pricing: AccountApiPricingRecord | None = None
+    cost_summary: AccountApiCostSummary | None = None
 
 
 class AccountDashboardResponse(BaseModel):

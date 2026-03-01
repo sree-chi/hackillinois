@@ -68,12 +68,20 @@ def normalize_phone_number(phone_number: str) -> str:
     Raises ValueError if the number looks invalid.
     """
     cleaned = phone_number.strip().replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
-    if not cleaned.startswith("+"):
-        raise ValueError(f"Phone number must start with '+' country code, got: {phone_number!r}")
-    digits = cleaned[1:]
+    if cleaned.startswith("+"):
+        digits = cleaned[1:]
+        normalized = cleaned
+    else:
+        digits = cleaned
+        if len(digits) == 10:
+            normalized = f"+1{digits}"
+        elif len(digits) == 11 and digits.startswith("1"):
+            normalized = f"+{digits}"
+        else:
+            raise ValueError(f"Phone number must include a valid country code, got: {phone_number!r}")
     if not digits.isdigit() or len(digits) < 7 or len(digits) > 15:
         raise ValueError(f"Invalid phone number: {phone_number!r}")
-    return cleaned
+    return normalized
 
 
 def validate_email(email: str) -> bool:

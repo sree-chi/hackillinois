@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.db_models import (
     AccountApiClientModel,
+    AccountApiPricingModel,
     AccountModel,
     AccountPhoneVerificationModel,
     AccountSessionModel,
@@ -23,7 +24,9 @@ from src.db_models import (
     ReceiptStatusEnum,
 )
 from src.models import (
+    AccountApiCostSummary,
     AccountApiKeySummary,
+    AccountApiPricingRecord,
     AccountRecord,
     AccountSessionRecord,
     AgentRecord,
@@ -38,6 +41,7 @@ from src.models import (
     LinkedWalletRecord,
     POLICY_SCHEMA_VERSION,
     Policy,
+    UpdateApiPricingRequest,
     WalletLinkChallengeRecord,
     canonical_hash,
     expires_at,
@@ -320,6 +324,101 @@ class DatabaseStore:
         self.db.refresh(row)
         return ApiClientRecord.model_validate(row)
 
+    def get_api_client_for_account(self, account_id: str, client_id: str) -> ApiClientModel | None:
+        return (
+            self.db.query(ApiClientModel)
+            .join(AccountApiClientModel, AccountApiClientModel.client_id == ApiClientModel.client_id)
+            .filter(
+                AccountApiClientModel.account_id == account_id,
+                ApiClientModel.client_id == client_id,
+            )
+            .first()
+        )
+
+    def get_api_pricing_for_account(self, account_id: str, client_id: str) -> AccountApiPricingRecord | None:
+        row = (
+            self.db.query(AccountApiPricingModel)
+            .filter(
+                AccountApiPricingModel.account_id == account_id,
+                AccountApiPricingModel.client_id == client_id,
+            )
+            .first()
+        )
+        return AccountApiPricingRecord.model_validate(row) if row else None
+
+    def upsert_api_pricing_for_account(
+        self,
+        account_id: str,
+        client_id: str,
+        payload: UpdateApiPricingRequest,
+    ) -> AccountApiPricingRecord | None:
+        client = self.get_api_client_for_account(account_id, client_id)
+        if not client:
+            return None
+
+        row = (
+            self.db.query(AccountApiPricingModel)
+            .filter(
+                AccountApiPricingModel.account_id == account_id,
+                AccountApiPricingModel.client_id == client_id,
+            )
+            .first()
+        )
+        if not row:
+            row = AccountApiPricingModel(
+                pricing_id=new_id("prc"),
+                account_id=account_id,
+                client_id=client_id,
+            )
+            self.db.add(row)
+
+        row.provider_name = payload.provider_name.strip()
+        row.api_name = payload.api_name.strip()
+        row.price_per_call_usd = payload.price_per_call_usd
+        row.monthly_budget_usd = payload.monthly_budget_usd
+        row.sol_usd_rate = payload.sol_usd_rate
+        row.billing_notes = payload.billing_notes.strip() if payload.billing_notes else None
+
+        self.db.commit()
+        self.db.refresh(row)
+        return AccountApiPricingRecord.model_validate(row)
+
+    def _build_api_cost_summary(
+        self,
+        client: ApiClientModel,
+        pricing: AccountApiPricingRecord | None,
+        usage_by_wallet: dict[str, dict[str, float]],
+    ) -> AccountApiCostSummary:
+        usage = usage_by_wallet.get(client.wallet_address or "", {})
+        total_allowed_requests = int(usage.get("total_allowed_requests", 0))
+        actual_tracked_spend_usd = round(float(usage.get("actual_tracked_spend_usd", 0.0)), 4)
+        estimated_running_cost_usd = 0.0
+        estimated_running_cost_sol = None
+        monthly_budget_usd = None
+        remaining_budget_usd = None
+        over_budget = False
+
+        if pricing:
+            estimated_running_cost_usd = round(total_allowed_requests * pricing.price_per_call_usd, 4)
+            monthly_budget_usd = pricing.monthly_budget_usd
+            if monthly_budget_usd is not None:
+                remaining_budget_usd = round(monthly_budget_usd - estimated_running_cost_usd, 4)
+                over_budget = estimated_running_cost_usd > monthly_budget_usd
+            if pricing.sol_usd_rate:
+                estimated_running_cost_sol = round(estimated_running_cost_usd / pricing.sol_usd_rate, 8)
+
+        return AccountApiCostSummary(
+            client_id=client.client_id,
+            attributed_wallet=client.wallet_address,
+            total_allowed_requests=total_allowed_requests,
+            actual_tracked_spend_usd=actual_tracked_spend_usd,
+            estimated_running_cost_usd=estimated_running_cost_usd,
+            estimated_running_cost_sol=estimated_running_cost_sol,
+            monthly_budget_usd=monthly_budget_usd,
+            remaining_budget_usd=remaining_budget_usd,
+            over_budget=over_budget,
+        )
+
     def list_api_clients_for_account(self, account_id: str) -> list[AccountApiKeySummary]:
         rows = (
             self.db.query(ApiClientModel)
@@ -328,6 +427,35 @@ class DatabaseStore:
             .order_by(ApiClientModel.created_at.desc())
             .all()
         )
+        pricing_rows = (
+            self.db.query(AccountApiPricingModel)
+            .filter(AccountApiPricingModel.account_id == account_id)
+            .all()
+        )
+        pricing_by_client = {
+            row.client_id: AccountApiPricingRecord.model_validate(row)
+            for row in pricing_rows
+        }
+        usage_rows = (
+            self.db.query(
+                AuditRecordModel.agent_wallet,
+                sql_func.count(AuditRecordModel.id),
+                sql_func.sum(AuditRecordModel.amount_usd),
+            )
+            .filter(
+                AuditRecordModel.status == AuditStatusEnum.allowed,
+                AuditRecordModel.agent_wallet.isnot(None),
+            )
+            .group_by(AuditRecordModel.agent_wallet)
+            .all()
+        )
+        usage_by_wallet = {
+            (wallet or ""): {
+                "total_allowed_requests": count or 0,
+                "actual_tracked_spend_usd": float(total_spend) if total_spend else 0.0,
+            }
+            for wallet, count, total_spend in usage_rows
+        }
         return [
             AccountApiKeySummary(
                 client_id=row.client_id,
@@ -340,6 +468,12 @@ class DatabaseStore:
                 last_used_at=row.last_used_at,
                 suspended_at=row.suspended_at,
                 revoked_at=row.revoked_at,
+                pricing=pricing_by_client.get(row.client_id),
+                cost_summary=self._build_api_cost_summary(
+                    row,
+                    pricing_by_client.get(row.client_id),
+                    usage_by_wallet,
+                ),
             )
             for row in rows
         ]

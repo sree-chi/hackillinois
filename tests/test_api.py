@@ -143,6 +143,82 @@ def test_account_dashboard_lists_issued_keys():
     assert body["linked_wallets"] == []
 
 
+def test_account_can_store_api_pricing_and_view_budget_summary():
+    session_token = create_account_session()
+    wallet_address = "So11111111111111111111111111111111111111112"
+    issue = client.post(
+        "/v1/developer/keys",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "app_name": "Priced App",
+            "owner_name": "Portal Owner",
+            "wallet_address": wallet_address,
+            "wallet_label": "Ops Wallet",
+        },
+    )
+    assert issue.status_code == 201
+    issued = issue.json()
+
+    pricing = client.put(
+        f"/v1/accounts/me/keys/{issued['client_id']}/pricing",
+        headers={"Authorization": f"Bearer {session_token}"},
+        json={
+            "provider_name": "OpenAI",
+            "api_name": "Responses API",
+            "price_per_call_usd": 1.75,
+            "monthly_budget_usd": 3.00,
+            "sol_usd_rate": 150.0,
+            "billing_notes": "Manual pricing import",
+        },
+    )
+    assert pricing.status_code == 200
+    assert pricing.json()["provider_name"] == "OpenAI"
+
+    policy = client.post(
+        "/v1/policies",
+        headers={"Authorization": f"Bearer {issued['api_key']}"},
+        json={
+            "name": "Priced usage policy",
+            "rules": {"allowed_http_methods": ["POST"], "max_spend_usd": 100},
+        },
+    )
+    assert policy.status_code == 201
+    policy_id = policy.json()["id"]
+
+    for amount in (0.5, 1.25):
+        authorize = client.post(
+            "/v1/authorize",
+            headers={"Authorization": f"Bearer {issued['api_key']}"},
+            json={
+                "policy_id": policy_id,
+                "requester": "agent://billing-check",
+                "agent_wallet": wallet_address,
+                "action": {
+                    "type": "responses.create",
+                    "http_method": "POST",
+                    "resource": "/responses",
+                    "amount_usd": amount,
+                },
+                "reasoning_trace": "Track billable API usage for dashboard pricing.",
+            },
+        )
+        assert authorize.status_code == 200
+
+    dashboard = client.get(
+        "/v1/accounts/me/dashboard",
+        headers={"Authorization": f"Bearer {session_token}"},
+    )
+    assert dashboard.status_code == 200
+    key_summary = dashboard.json()["api_keys"][0]
+    assert key_summary["pricing"]["provider_name"] == "OpenAI"
+    assert key_summary["cost_summary"]["total_allowed_requests"] == 2
+    assert key_summary["cost_summary"]["estimated_running_cost_usd"] == 3.5
+    assert key_summary["cost_summary"]["estimated_running_cost_sol"] == pytest.approx(3.5 / 150.0)
+    assert key_summary["cost_summary"]["actual_tracked_spend_usd"] == 1.75
+    assert key_summary["cost_summary"]["over_budget"] is True
+    assert key_summary["cost_summary"]["remaining_budget_usd"] == -0.5
+
+
 def test_account_can_revoke_its_api_key():
     session_token = create_account_session()
     issue = client.post(

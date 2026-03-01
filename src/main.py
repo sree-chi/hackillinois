@@ -34,6 +34,7 @@ from src.auth import (
 )
 from src.database import Base, engine, get_db
 from src.models import (
+    AccountApiPricingRecord,
     AccountDashboardResponse,
     AccountSessionResponse,
     AgentIntentRequest,
@@ -59,6 +60,7 @@ from src.models import (
     ReceiptStatus,
     RequestPhoneCodeRequest,
     SafetyViolation,
+    UpdateApiPricingRequest,
     VerifyPhoneCodeRequest,
     VerifyProofRequest,
     VerifyProofResult,
@@ -460,6 +462,41 @@ def account_dashboard(
         api_keys=store.list_api_clients_for_account(account.account_id),
         linked_wallets=store.list_wallets_for_account(account.account_id),
     )
+
+
+@app.get("/v1/accounts/me/keys/{client_id}/pricing", response_model=AccountApiPricingRecord)
+def get_account_api_key_pricing(
+    client_id: str,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    pricing = store.get_api_pricing_for_account(account.account_id, client_id)
+    if not pricing:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="API_PRICING_NOT_FOUND",
+            message="No pricing profile exists for this API key.",
+        )
+    return pricing
+
+
+@app.put("/v1/accounts/me/keys/{client_id}/pricing", response_model=AccountApiPricingRecord)
+def upsert_account_api_key_pricing(
+    client_id: str,
+    payload: UpdateApiPricingRequest,
+    account: AccountRecord = Depends(verify_account_session),
+    db: Session = Depends(get_db),
+):
+    store = DatabaseStore(db)
+    pricing = store.upsert_api_pricing_for_account(account.account_id, client_id, payload)
+    if not pricing:
+        raise error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="API_KEY_NOT_FOUND",
+            message="The requested API key does not exist for this account.",
+        )
+    return pricing
 
 
 @app.post(

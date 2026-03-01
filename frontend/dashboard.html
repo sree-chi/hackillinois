@@ -144,6 +144,82 @@
                 <section class="grid">
                     <section class="panel">
                         <div class="section-heading">
+                            <p class="eyebrow">Pricing</p>
+                            <h2>API cost tracking</h2>
+                        </div>
+                        <p class="muted">Enter the billing rate for each issued key so Sentinel can estimate running API cost, compare it to budget, and convert the estimate into SOL.</p>
+                        <form id="pricing-form" class="stack">
+                            <label>
+                                <span>API key</span>
+                                <select id="pricing-client-id" required></select>
+                            </label>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                                <label>
+                                    <span>Provider</span>
+                                    <input id="pricing-provider-name" type="text" placeholder="OpenAI" required>
+                                </label>
+                                <label>
+                                    <span>API / model</span>
+                                    <input id="pricing-api-name" type="text" placeholder="Responses API" required>
+                                </label>
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
+                                <label>
+                                    <span>Price per call (USD)</span>
+                                    <input id="pricing-price-per-call" type="number" min="0" step="0.000001" placeholder="0.0025" required>
+                                </label>
+                                <label>
+                                    <span>Budget (USD)</span>
+                                    <input id="pricing-budget-usd" type="number" min="0" step="0.01" placeholder="250">
+                                </label>
+                                <label>
+                                    <span>SOL price (USD)</span>
+                                    <input id="pricing-sol-rate" type="number" min="0.000001" step="0.000001" placeholder="150">
+                                </label>
+                            </div>
+                            <label>
+                                <span>Billing notes</span>
+                                <textarea id="pricing-billing-notes" rows="4" placeholder="Paste plan notes, invoice context, or manual billing assumptions."></textarea>
+                            </label>
+                            <div class="action-row">
+                                <button id="save-pricing-button" class="btn btn-primary" type="submit" disabled>Save pricing</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="section-heading">
+                            <p class="eyebrow">Summary</p>
+                            <h2>Running cost</h2>
+                        </div>
+                        <div class="summary-grid">
+                            <div class="summary-card">
+                                <span class="summary-label">Estimated cost</span>
+                                <strong id="pricing-estimated-cost">$0.00</strong>
+                            </div>
+                            <div class="summary-card">
+                                <span class="summary-label">Estimated cost in SOL</span>
+                                <strong id="pricing-estimated-sol">Not set</strong>
+                            </div>
+                            <div class="summary-card">
+                                <span class="summary-label">Allowed API calls</span>
+                                <strong id="pricing-total-calls">0</strong>
+                            </div>
+                            <div class="summary-card">
+                                <span class="summary-label">Budget remaining</span>
+                                <strong id="pricing-budget-remaining">Not set</strong>
+                            </div>
+                        </div>
+                        <div class="output-card">
+                            <h3>Pricing status</h3>
+                            <p id="pricing-status" class="muted">Save a pricing profile for one of your issued API keys to start tracking estimated cost against budget.</p>
+                        </div>
+                    </section>
+                </section>
+
+                <section class="grid">
+                    <section class="panel">
+                        <div class="section-heading">
                             <p class="eyebrow">Solana</p>
                             <h2>Linked wallets</h2>
                         </div>

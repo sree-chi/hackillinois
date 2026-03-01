@@ -12,9 +12,11 @@ let currentSessionToken = localStorage.getItem(STORAGE_KEYS.sessionToken) || "";
 let currentIssuedClientId = "";
 let currentAccount = null;
 let currentLinkedWallets = [];
+let currentApiKeys = [];
 let selectedWalletAddress = "";
 let phantomProviderReady = false;
 let pendingPhoneNumber = "";
+let selectedPricingClientId = "";
 
 function accountIdentity(account) {
     return account.email;
@@ -57,6 +59,20 @@ const phone2faRequestButton = document.getElementById("phone-2fa-request-button"
 const phone2faVerifyButton = document.getElementById("phone-2fa-verify-button");
 const phone2faSummary = document.getElementById("phone-2fa-summary");
 const phone2faStatus = document.getElementById("phone-2fa-status");
+const pricingForm = document.getElementById("pricing-form");
+const pricingClientId = document.getElementById("pricing-client-id");
+const pricingProviderName = document.getElementById("pricing-provider-name");
+const pricingApiName = document.getElementById("pricing-api-name");
+const pricingPricePerCall = document.getElementById("pricing-price-per-call");
+const pricingBudgetUsd = document.getElementById("pricing-budget-usd");
+const pricingSolRate = document.getElementById("pricing-sol-rate");
+const pricingBillingNotes = document.getElementById("pricing-billing-notes");
+const savePricingButton = document.getElementById("save-pricing-button");
+const pricingEstimatedCost = document.getElementById("pricing-estimated-cost");
+const pricingEstimatedSol = document.getElementById("pricing-estimated-sol");
+const pricingTotalCalls = document.getElementById("pricing-total-calls");
+const pricingBudgetRemaining = document.getElementById("pricing-budget-remaining");
+const pricingStatus = document.getElementById("pricing-status");
 
 function resolveApiBase() {
     const { hostname, origin } = window.location;
@@ -122,9 +138,34 @@ function formatDate(value) {
     return new Date(value).toLocaleString();
 }
 
+function formatUsd(value) {
+    return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4,
+    }).format(Number(value || 0));
+}
+
+function formatCount(value) {
+    return new Intl.NumberFormat().format(Number(value || 0));
+}
+
+function formatSol(value) {
+    if (value == null) {
+        return "Not set";
+    }
+    return `${Number(value).toFixed(6)} SOL`;
+}
+
 function setPhone2faStatus(message, type = "muted") {
     phone2faStatus.textContent = message;
     phone2faStatus.dataset.state = type;
+}
+
+function setPricingStatus(message, type = "muted") {
+    pricingStatus.textContent = message;
+    pricingStatus.dataset.state = type;
 }
 
 function openPhone2faOverlay() {
@@ -144,6 +185,80 @@ function renderPhone2fa(account) {
     if (!verifiedPhone && !pendingPhoneNumber) {
         setPhone2faStatus("Request a code, then confirm it here. In mock mode the code is shown in the status message.");
     }
+}
+
+function getSelectedPricingKey() {
+    return currentApiKeys.find((entry) => entry.client_id === selectedPricingClientId) || null;
+}
+
+function renderPricingSummary(entry) {
+    const summary = entry?.cost_summary || null;
+    if (!entry || !summary) {
+        pricingEstimatedCost.textContent = "$0.00";
+        pricingEstimatedSol.textContent = "Not set";
+        pricingTotalCalls.textContent = "0";
+        pricingBudgetRemaining.textContent = "Not set";
+        setPricingStatus("Save a pricing profile for one of your issued API keys to start tracking estimated cost against budget.");
+        return;
+    }
+
+    pricingEstimatedCost.textContent = formatUsd(summary.estimated_running_cost_usd);
+    pricingEstimatedSol.textContent = formatSol(summary.estimated_running_cost_sol);
+    pricingTotalCalls.textContent = formatCount(summary.total_allowed_requests);
+    pricingBudgetRemaining.textContent = summary.monthly_budget_usd == null
+        ? "Not set"
+        : formatUsd(summary.remaining_budget_usd);
+
+    if (!entry.pricing) {
+        setPricingStatus("This key does not have a saved pricing profile yet. Add provider pricing and a budget to start comparisons.");
+        return;
+    }
+
+    const budgetMessage = summary.monthly_budget_usd == null
+        ? "No budget set."
+        : summary.over_budget
+            ? `Over budget by ${formatUsd(Math.abs(summary.remaining_budget_usd || 0))}.`
+            : `${formatUsd(summary.remaining_budget_usd || 0)} remaining.`;
+    setPricingStatus(
+        `${entry.pricing.provider_name} ${entry.pricing.api_name}: ${formatUsd(summary.estimated_running_cost_usd)} estimated across ${formatCount(summary.total_allowed_requests)} allowed calls. ${budgetMessage}`,
+        summary.over_budget ? "error" : "success",
+    );
+}
+
+function renderPricingEditor() {
+    const hasKeys = currentApiKeys.length > 0;
+    pricingClientId.innerHTML = hasKeys
+        ? currentApiKeys.map((item) => `<option value="${item.client_id}">${item.app_name} (${item.api_key_prefix})</option>`).join("")
+        : '<option value="">No keys issued</option>';
+
+    if (!hasKeys) {
+        selectedPricingClientId = "";
+        pricingProviderName.value = "";
+        pricingApiName.value = "";
+        pricingPricePerCall.value = "";
+        pricingBudgetUsd.value = "";
+        pricingSolRate.value = "";
+        pricingBillingNotes.value = "";
+        renderPricingSummary(null);
+        return;
+    }
+
+    if (!currentApiKeys.some((item) => item.client_id === selectedPricingClientId)) {
+        selectedPricingClientId = currentIssuedClientId && currentApiKeys.some((item) => item.client_id === currentIssuedClientId)
+            ? currentIssuedClientId
+            : currentApiKeys[0].client_id;
+    }
+    pricingClientId.value = selectedPricingClientId;
+
+    const selected = getSelectedPricingKey();
+    const pricing = selected?.pricing || null;
+    pricingProviderName.value = pricing?.provider_name || "";
+    pricingApiName.value = pricing?.api_name || "";
+    pricingPricePerCall.value = pricing?.price_per_call_usd ?? "";
+    pricingBudgetUsd.value = pricing?.monthly_budget_usd ?? "";
+    pricingSolRate.value = pricing?.sol_usd_rate ?? "";
+    pricingBillingNotes.value = pricing?.billing_notes || "";
+    renderPricingSummary(selected);
 }
 
 function bytesToBase64(bytes) {
@@ -314,6 +429,43 @@ function renderApiKeys(apiKeys) {
     `).join("");
 }
 
+function renderAccountApiKeys(apiKeys) {
+    const visibleKeys = apiKeys.filter((entry) => !entry.revoked_at);
+
+    if (!visibleKeys.length) {
+        apiKeyList.innerHTML = '<div class="empty-state">No keys issued yet.</div>';
+        return;
+    }
+
+    apiKeyList.innerHTML = visibleKeys.map((entry) => `
+        <article class="activity-card activity-success">
+            <div class="activity-header">
+                <div class="activity-copy">
+                    <p class="activity-title">${entry.app_name}${entry.wallet_label ? ` <span style="font-size:0.82rem;color:var(--primary-dark);font-weight:600">Wallet ${entry.wallet_label}</span>` : ""}</p>
+                    <p class="activity-meta">${entry.owner_email} | Created ${new Date(entry.created_at).toLocaleString()}</p>
+                    ${entry.wallet_address ? `<p class="activity-meta" style="font-family:'IBM Plex Mono',monospace;font-size:0.78rem;">Wallet: ${entry.wallet_address}</p>` : ""}
+                    ${entry.pricing ? `<p class="activity-meta">Pricing: ${entry.pricing.provider_name} ${entry.pricing.api_name} at ${formatUsd(entry.pricing.price_per_call_usd)} / call</p>` : `<p class="activity-meta">Pricing: not configured</p>`}
+                </div>
+                <div class="action-row action-row-wrap">
+                    <span class="status-pill ${entry.suspended_at ? "status-warning" : "status-success"}">
+                        ${entry.suspended_at ? "suspended" : "active"}
+                    </span>
+                    <button class="btn btn-ghost" type="button" data-suspend-key="${entry.client_id}" ${entry.suspended_at ? "disabled" : ""}>Temp remove</button>
+                    <button class="btn btn-ghost" type="button" data-restore-key="${entry.client_id}" ${!entry.suspended_at ? "disabled" : ""}>Restore</button>
+                    <button class="btn btn-ghost" type="button" data-revoke-key="${entry.client_id}">Permanent</button>
+                </div>
+            </div>
+            <p class="activity-message">
+                Prefix ${entry.api_key_prefix}
+                ${entry.last_used_at ? ` | Last used ${new Date(entry.last_used_at).toLocaleString()}` : " | Not used yet"}
+                ${entry.suspended_at ? ` | Suspended ${new Date(entry.suspended_at).toLocaleString()}` : ""}
+                ${entry.cost_summary ? ` | Estimated API cost ${formatUsd(entry.cost_summary.estimated_running_cost_usd)} across ${formatCount(entry.cost_summary.total_allowed_requests)} allowed calls` : ""}
+                ${entry.cost_summary?.monthly_budget_usd != null ? ` | Budget ${entry.cost_summary.over_budget ? "exceeded" : "remaining"} ${formatUsd(Math.abs(entry.cost_summary.remaining_budget_usd || 0))}` : ""}
+            </p>
+        </article>
+    `).join("");
+}
+
 function updateDashboardState() {
     if (!currentSessionToken) {
         window.location.href = "/";
@@ -322,6 +474,7 @@ function updateDashboardState() {
     const signedIn = Boolean(currentAccount);
     issueKeyButton.disabled = !signedIn;
     logoutButton.disabled = false;
+    savePricingButton.disabled = !(signedIn && currentApiKeys.length);
     if (!signedIn) {
         return;
     }
@@ -358,8 +511,10 @@ async function fetchDashboard() {
         }
 
         currentAccount = data.account;
+        currentApiKeys = data.api_keys || [];
         renderPhone2fa(currentAccount);
-        renderApiKeys(data.api_keys || []);
+        renderAccountApiKeys(currentApiKeys);
+        renderPricingEditor();
         renderLinkedWallets(data.linked_wallets || []);
         if (currentLinkedWallets.length) {
             selectedWalletAddress = currentLinkedWallets.some((wallet) => wallet.wallet_address === selectedWalletAddress)
@@ -636,6 +791,52 @@ runAuthorizeButton.addEventListener("click", async () => {
     }
 });
 
+pricingClientId.addEventListener("change", () => {
+    selectedPricingClientId = pricingClientId.value;
+    renderPricingEditor();
+});
+
+pricingForm.addEventListener("input", () => {
+    const selected = getSelectedPricingKey();
+    if (!selected) return;
+    const totalCalls = selected.cost_summary?.total_allowed_requests || 0;
+    const pricePerCall = Number(pricingPricePerCall.value || 0);
+    const estimatedCost = totalCalls * pricePerCall;
+    const budget = pricingBudgetUsd.value ? Number(pricingBudgetUsd.value) : null;
+    const solRate = pricingSolRate.value ? Number(pricingSolRate.value) : null;
+    pricingEstimatedCost.textContent = formatUsd(estimatedCost);
+    pricingEstimatedSol.textContent = solRate ? formatSol(estimatedCost / solRate) : "Not set";
+    pricingTotalCalls.textContent = formatCount(totalCalls);
+    pricingBudgetRemaining.textContent = budget == null ? "Not set" : formatUsd(budget - estimatedCost);
+});
+
+pricingForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!currentSessionToken || !selectedPricingClientId) return;
+    try {
+        const response = await fetch(`${API_BASE}/v1/accounts/me/keys/${selectedPricingClientId}/pricing`, {
+            method: "PUT",
+            headers: sessionHeaders(),
+            body: JSON.stringify({
+                provider_name: pricingProviderName.value.trim(),
+                api_name: pricingApiName.value.trim(),
+                price_per_call_usd: Number(pricingPricePerCall.value),
+                monthly_budget_usd: pricingBudgetUsd.value ? Number(pricingBudgetUsd.value) : null,
+                sol_usd_rate: pricingSolRate.value ? Number(pricingSolRate.value) : null,
+                billing_notes: pricingBillingNotes.value.trim() || null,
+            }),
+        });
+        const data = await readApiResponse(response);
+        if (!response.ok) throw new Error(data.detail?.error?.message || data.message || JSON.stringify(data));
+        setPricingStatus(`Saved pricing for ${data.provider_name} ${data.api_name}.`, "success");
+        await fetchDashboard();
+        log(`Saved API pricing profile for key ${selectedPricingClientId}`, "success");
+    } catch (error) {
+        setPricingStatus(`Pricing save failed: ${error.message}`, "error");
+        log(`Pricing save failed: ${error.message}`, "error");
+    }
+});
+
 logoutButton.addEventListener("click", clearSession);
 openPhone2faButton.addEventListener("click", openPhone2faOverlay);
 closePhone2faButton.addEventListener("click", closePhone2faOverlay);
@@ -704,6 +905,7 @@ copyJsButton.addEventListener("click", () => copyText(jsSnippet.textContent, cop
 
 updateSnippets();
 updateWalletProviderState();
+renderPricingEditor();
 if (currentApiKey) {
     issuedKey.textContent = currentApiKey;
     issuedKeyMeta.textContent = "Loaded latest API key from local browser storage.";

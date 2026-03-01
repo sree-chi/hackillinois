@@ -193,6 +193,26 @@ class AccountApiClientModel(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class AccountApiPricingModel(Base):
+    __tablename__ = "account_api_pricing"
+
+    pricing_id = Column(String, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    client_id = Column(String, nullable=False, unique=True, index=True)
+    provider_name = Column(String(100), nullable=False)
+    api_name = Column(String(120), nullable=False)
+    price_per_call_usd = Column(Float, nullable=False, default=0, server_default="0")
+    monthly_budget_usd = Column(Float, nullable=True)
+    sol_usd_rate = Column(Float, nullable=True)
+    billing_notes = Column(String(1000), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_account_api_pricing_account_client", "account_id", "client_id"),
+    )
+
+
 class AgentModel(Base):
     __tablename__ = "agents"
 
