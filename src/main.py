@@ -783,11 +783,9 @@ def list_policies(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    raise error_response(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        code="POLICY_LIST_UNAVAILABLE",
-        message="Policy listing is temporarily unavailable in this build.",
-    )
+    store = DatabaseStore(db)
+    policies = store.list_all_policies(limit=limit, offset=offset)
+    return {"data": [p.model_dump(mode="json") for p in policies]}
 
 
 @app.get("/v1/policies/{policy_id}", dependencies=[Depends(verify_api_key)])

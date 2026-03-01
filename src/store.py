@@ -450,6 +450,26 @@ class DatabaseStore:
             "created_at": row.created_at,
         })
 
+    def list_all_policies(self, limit: int = 50, offset: int = 0) -> list[Policy]:
+        rows = (
+            self.db.query(PolicyModel)
+            .order_by(PolicyModel.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return [
+            Policy.model_validate({
+                "id": r.id,
+                "name": r.name,
+                "description": r.description,
+                "policy_hash": r.policy_hash,
+                "rules": r.rules,
+                "created_at": r.created_at,
+            })
+            for r in rows
+        ]
+
     def append_audit(self, audit: AuditRecord) -> None:
         row = AuditRecordModel(
             id=audit.id,
