@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-import base64
 """Authentication helpers and dependencies for Sentinel Auth API.
 
 This file provides:
@@ -8,12 +5,7 @@ This file provides:
 - Session token handling and verification
 - Password hashing and verification utilities
 - A simple in-process rate limiter for authentication endpoints
-
-The user requested the file be replaced with this improved version which adds
-stricter startup checks (refuse to run in production with a default key),
-email validation helpers, and an auth attempt rate limiter.
 """
-
 from __future__ import annotations
 
 import base64
