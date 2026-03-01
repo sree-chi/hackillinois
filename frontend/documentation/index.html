@@ -237,8 +237,6 @@
                 <a class="topbar-link" href="/dashboard.html">Keys</a>
                 <a class="topbar-link topbar-link-active" href="/documentation/index.html">Documentation</a>
                 <a class="topbar-link" href="/agent.html">Agent Demo</a>
-                <a class="topbar-link" href="#" id="logout-btn"
-                    style="color: var(--error, #ef4444); margin-left: auto;">Log Out</a>
             </div>
         </nav>
 
@@ -304,14 +302,11 @@
                     <div class="output-card compact-card">
                         <span class="meta-label">Headers Required</span>
                         <p class="muted" style="margin-top: 4px; margin-bottom: 8px;">
-                            <code>Content-Type: application/json</code>
-                        </p>
+                            <code>Content-Type: application/json</code></p>
                         <p class="muted" style="margin-top: 4px; margin-bottom: 8px;"><strong>Agent Endpoints:</strong>
-                            <code>Authorization: Bearer &lt;API_KEY&gt;</code>
-                        </p>
+                            <code>Authorization: Bearer &lt;API_KEY&gt;</code></p>
                         <p class="muted" style="margin-top: 4px;"><strong>Dashboard Endpoints:</strong>
-                            <code>X-Session-Token: &lt;SESSION_TOKEN&gt;</code>
-                        </p>
+                            <code>X-Session-Token: &lt;SESSION_TOKEN&gt;</code></p>
                     </div>
                 </section>
 
@@ -685,8 +680,7 @@
 }</pre>
                         <p class="muted" style="font-size: 0.85rem; padding: 10px;">Triggered automatically if
                             <code>amount_usd</code> is &gt; $1,000. Agent must resubmit the exact same payload but
-                            include a signed micro-transaction in the <code>x-solana-tx-signature</code> header.
-                        </p>
+                            include a signed micro-transaction in the <code>x-solana-tx-signature</code> header.</p>
                     </div>
 
                 </section>
@@ -843,15 +837,13 @@
                     <div class="output-card">
                         <p class="muted" style="margin-top: 0;"><strong>Per-Policy Budgets:</strong> Enforced by
                             comparing the sum of all previously approved <code>amount_usd</code> for a policy against
-                            <code>max_spend_usd</code>. Returns <code>403 Forbidden</code> if exceeded.
-                        </p>
+                            <code>max_spend_usd</code>. Returns <code>403 Forbidden</code> if exceeded.</p>
                         <p class="muted" style="margin-top: 12px;"><strong>Per-Policy Rate Limits:</strong> Controlled
                             by <code>max_requests_per_minute</code>. Returns <code>429 Too Many Requests</code> if
                             exceeded.</p>
                         <p class="muted" style="margin-top: 12px;"><strong>High-Risk Auth (x402):</strong> Actions
                             requesting <code>amount_usd</code> >= <code>$1,000</code> automatically fail with
-                            <code>402 Payment Required</code> unless a valid Solana signature is attached.
-                        </p>
+                            <code>402 Payment Required</code> unless a valid Solana signature is attached.</p>
                     </div>
 
                     <div class="code-block-wrapper">
@@ -942,7 +934,6 @@ curl -s -X POST http://localhost:8000/v1/authorize \
             });
         });
     </script>
-    <script src="../auth.js"></script>
 </body>
 
 </html>
