@@ -74,6 +74,8 @@ from src.solana import SolanaVerificationError, receipt_service
 from src.sms import SmsDeliveryError, SmsSender
 from src.store import DatabaseStore
 
+
+#hello
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"

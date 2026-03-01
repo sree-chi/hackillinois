@@ -198,6 +198,7 @@ function renderWalletOverview(overview) {
         return;
     }
 
+
     walletTransactionList.innerHTML = transactions.map((entry) => `
         <article class="activity-card ${entry.success ? "activity-success" : "activity-danger"}">
             <div class="activity-header">
